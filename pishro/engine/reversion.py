@@ -100,7 +100,7 @@ class ReversionEngine:
         self.candidates: list[dict] = []
         self.blocked: dict[str, str] = {}
         self.market_stats: dict[str, dict] = {}
-        self.fee_regime = "unknown"
+        self.fee_regime = "api_table"
         self.latencies: list[float] = []
         self.errors = 0
 

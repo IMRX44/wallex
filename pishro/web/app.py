@@ -20,12 +20,15 @@ STATIC = Path(__file__).parent / "static"
 security = HTTPBasic(auto_error=False)
 
 
-def create_app(cfg: Config | None = None, start_bot: bool = True) -> FastAPI:
+def create_app(cfg: Config | None = None, start_bot: bool = True, bot_instance: Bot | None = None) -> FastAPI:
     cfg = cfg or load_config()
-    state: dict = {"bot": None, "task": None}
+    state: dict = {"bot": bot_instance, "task": None}
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
+        if bot_instance is not None:          # externally driven bot (tests, video rendering)
+            yield
+            return
         bot = Bot(cfg)
         state["bot"] = bot
         if start_bot:

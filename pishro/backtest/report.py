@@ -117,6 +117,14 @@ code{direction:ltr;unicode-bidi:embed}
 """
 
 
+def _downsample(eq: pd.Series, n: int = 240) -> list[list[float]]:
+    if eq is None or len(eq) == 0:
+        return []
+    step = max(1, len(eq) // n)
+    s = eq.iloc[::step]
+    return [[float(t.timestamp()), float(v)] for t, v in zip(s.index, s.values)] + [[float(eq.index[-1].timestamp()), float(eq.iloc[-1])]]
+
+
 def write_report(results: list[dict], out_dir: Path, meta: dict) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     body = [f"<h1>گزارش بک‌تست ربات پیشرو</h1><p class='note'>{html.escape(meta.get('subtitle', ''))}</p>"]
@@ -151,7 +159,8 @@ def write_report(results: list[dict], out_dir: Path, meta: dict) -> Path:
                         "</table>")
         body.append("</div>")
         summary.append({"maker": r["maker"], "taker": r["taker"], "rules_test": m_rules, "ml_test": m_ml,
-                        "rules_full": m_full, "mc": mc, "model": rep, "train_events": r.get("train_events")})
+                        "rules_full": m_full, "mc": mc, "model": rep, "train_events": r.get("train_events"),
+                        "curves": {k: _downsample(r[f"eq_{k}"]) for k in ("rules_test", "ml_test", "rules_full")}})
     body.append("<div class='card note'><h2>فرض‌های بک‌تست</h2><ul>"
                 "<li>سفارش هر دقیقه فقط با داده‌ی تا پایان دقیقه‌ی قبل ساخته می‌شود (بدون نگاه به آینده).</li>"
                 "<li>خرید منتظر فقط وقتی پر می‌شود که قیمت ۰.۰۵٪ از آن عبور کند و حجم دقیقه کافی باشد.</li>"

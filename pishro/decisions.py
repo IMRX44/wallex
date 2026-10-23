@@ -37,6 +37,14 @@ class DecisionLog:
         self.recent: deque = deque(maxlen=400)
         self._lock = threading.Lock()
         self.seq = 0
+        if self.path.exists():          # keep the dashboard history across restarts
+            try:
+                with open(self.path, encoding="utf-8") as f:
+                    for line in f.readlines()[-400:]:
+                        self.recent.append(json.loads(line))
+                self.seq = self.recent[-1].get("seq", 0) if self.recent else 0
+            except (OSError, ValueError):
+                pass
 
     def log(self, kind: str, symbol: str = "", reason_fa: str = "", /, **data: Any) -> dict:
         now = time.time()

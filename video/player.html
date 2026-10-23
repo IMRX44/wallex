@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Pishro Demo</title>
+<style>
+@font-face{font-family:Vazirmatn;src:url("assets/Vazirmatn.woff2") format("woff2");font-weight:100 900}
+:root{--bg:#060b18;--fg:#e8eefc;--muted:#8fa3c7;--line:#1c2a4a;--green:#22c55e;--green2:#10b981;--blue:#3b82f6;
+  --cyan:#22d3ee;--amber:#f59e0b;--red:#ef4444;--violet:#a78bfa;--card:rgba(16,26,52,.78)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);font-family:Vazirmatn,Tahoma,sans-serif;color:var(--fg)}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden}
+canvas.full{position:absolute;inset:0}
+.scene{position:absolute;inset:0;opacity:0;padding:90px 110px 120px}
+.h1{font-size:64px;font-weight:800;letter-spacing:-.5px}
+.h2{font-size:46px;font-weight:800;margin-bottom:10px}
+.sub{font-size:26px;color:var(--muted);font-weight:400}
+.kicker{font-size:22px;color:var(--cyan);font-weight:600;letter-spacing:.5px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid rgba(80,120,200,.25);border-radius:22px;padding:26px 30px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);backdrop-filter:blur(6px)}
+.row{display:flex;gap:28px}.col{display:flex;flex-direction:column;gap:18px}
+.big{font-size:58px;font-weight:800;direction:ltr;unicode-bidi:plaintext}
+.label{font-size:21px;color:var(--muted)}
+.pos{color:var(--green)}.neg{color:var(--red)}.amb{color:var(--amber)}.blu{color:var(--blue)}.cya{color:var(--cyan)}
+.chip{display:inline-block;padding:8px 16px;border-radius:999px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);
+  font-size:20px;margin:6px 0 6px 10px}
+.mono{font-family:"DejaVu Sans Mono",monospace;direction:ltr;unicode-bidi:embed}
+#badge{position:absolute;top:22px;left:26px;padding:8px 18px;border-radius:10px;background:rgba(245,158,11,.14);
+  border:1px solid rgba(245,158,11,.6);color:#fcd34d;font-size:19px;font-weight:600;z-index:10}
+#brand{position:absolute;top:22px;right:30px;font-size:22px;font-weight:800;color:#cfe0ff;z-index:10;opacity:.85}
+#brand span{color:var(--green)}
+#chapters{position:absolute;bottom:26px;right:110px;left:110px;height:40px;z-index:10;display:flex;gap:8px;direction:rtl}
+#chapters .c{flex:1;position:relative}
+#chapters .bar{height:5px;border-radius:3px;background:rgba(143,163,199,.18);overflow:hidden}
+#chapters .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--green))}
+#chapters .t{font-size:15px;color:var(--muted);margin-top:6px;white-space:nowrap;text-align:right}
+#chapters .c.on .t{color:#fff}
+.bullet{display:flex;gap:14px;align-items:flex-start;font-size:27px;line-height:1.6;margin:12px 0}
+.bullet b{color:#fff}.bullet .dot{flex:0 0 14px;height:14px;border-radius:50%;margin-top:14px;background:var(--green)}
+.node{position:absolute;padding:18px 22px;border-radius:18px;background:var(--card);border:1px solid rgba(80,120,200,.35);
+  font-size:23px;font-weight:700;text-align:center;width:300px}
+.node small{display:block;font-size:17px;color:var(--muted);font-weight:400;margin-top:4px}
+.term{background:#050914;border:1px solid #1d2b4d;border-radius:16px;padding:24px 28px;font-size:25px;line-height:1.75;
+  font-family:"DejaVu Sans Mono",monospace;direction:ltr;text-align:left;color:#c7d6f5;white-space:pre}
+.bubble{border-radius:16px;padding:14px 18px;font-size:21px;margin:8px 0;max-width:100%}
+.tool{background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.45);font-family:"DejaVu Sans Mono",monospace;direction:ltr;text-align:left}
+.say{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.45)}
+.check{display:flex;gap:16px;align-items:center;font-size:25px;margin:13px 0}
+.check .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:rgba(34,197,94,.15);
+  border:1px solid rgba(34,197,94,.5);color:var(--green);font-weight:900;font-size:24px;flex:0 0 42px}
+.logline{font-size:20px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.035);margin:7px 0;border-right:4px solid var(--green)}
+.logline.s{border-right-color:var(--red)}
+.logline .m{color:var(--muted);font-size:16px}
+.kpi{min-width:250px}
+.shot{position:absolute;border-radius:18px;overflow:hidden;border:1px solid rgba(80,120,200,.4);box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.shot img{display:block;width:100%}
+.glow{text-shadow:0 0 30px rgba(34,197,94,.45)}
+.note{font-size:18px;color:#fcd34d}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="bg" class="full" width="1920" height="1080"></canvas>
+  <div id="brand">پیشرو <span>▲</span></div>
+  <div id="badge" style="display:none"></div>
+
+  <!-- 1 intro -->
+  <div class="scene" id="s1" style="display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">
+    <canvas id="logo" width="360" height="360" style="margin-bottom:10px"></canvas>
+    <div class="h1" id="s1t" style="font-size:120px">پیشرو</div>
+    <div class="sub" id="s1s" style="font-size:36px;margin-top:10px">ربات معاملاتی هوشمند والکس</div>
+    <div class="sub" id="s1s2" style="font-size:26px;margin-top:26px">بازگشت پریمیوم · مدل یادگیری ماشین · ایجنت Claude Opus 5.5 · مدیریت ریسک سخت‌گیر</div>
+    <div class="label" id="s1s3" style="margin-top:46px">چالش معاملات الگوریتمی والکس — هکاتون Agentic AI استارکوچ</div>
+  </div>
+
+  <!-- 2 challenge -->
+  <div class="scene" id="s2">
+    <div class="kicker">صورت مسئله</div>
+    <div class="h2">۵ میلیون تومان، ۳ روز، بدون دخالت دست</div>
+    <div class="row" style="margin-top:60px" id="s2cards"></div>
+    <div class="sub" id="s2goal" style="margin-top:70px;font-size:34px;color:#fff;text-align:center">هدف: <span class="pos">بیشترین بازده محقق‌شده</span> با <span class="amb">کمترین افت سرمایه</span> — و توضیح‌پذیر برای داور</div>
+  </div>
+
+  <!-- 3 idea -->
+  <div class="scene" id="s3">
+    <div class="kicker">ایده‌ی اصلی</div>
+    <div class="h2">بازگشت پریمیوم: خرید ارزان‌تر از قیمت جهانی، فروش در بازگشت</div>
+    <div class="row" style="margin-top:26px;align-items:flex-start">
+      <div class="col" style="width:640px" id="s3left">
+        <div class="card" id="s3f"><div class="label">قیمت منصفانه‌ی هر کوین به تومان</div>
+          <div style="font-size:32px;font-weight:800;margin-top:8px">قیمت بایننس × نرخ تتر والکس</div>
+          <div class="label" style="margin-top:6px">هر بازار پریمیوم عادی خودش را دارد؛ ربات آن را لحظه‌به‌لحظه یاد می‌گیرد</div></div>
+        <div id="s3b"></div>
+      </div>
+      <div class="card" style="flex:1;padding:16px" id="s3c"><canvas id="ideaChart" width="1000" height="600"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 4 architecture -->
+  <div class="scene" id="s4">
+    <div class="kicker">معماری</div>
+    <div class="h2">از داده تا سفارش، در یک حلقه‌ی ۲ ثانیه‌ای</div>
+    <canvas id="archEdges" class="full" width="1920" height="1080"></canvas>
+    <div id="archNodes"></div>
+  </div>
+
+  <!-- 5 ML -->
+  <div class="scene" id="s5">
+    <div class="kicker">هوش مصنوعی ۱</div>
+    <div class="h2">مدل یادگیری ماشین برای تک‌تک سفارش‌ها</div>
+    <div class="row" style="margin-top:30px">
+      <div class="card" style="width:720px" id="s5feat"><div class="label" style="margin-bottom:10px">۱۷ ویژگی که در لحظه‌ی هر سفارش اندازه گرفته می‌شود</div><div id="chips"></div></div>
+      <div class="col" style="flex:1">
+        <div class="card" style="display:flex;gap:30px;align-items:center" id="s5g">
+          <canvas id="gauge" width="380" height="240"></canvas>
+          <div><div class="label">احتمال سودده بودن بعد از کارمزد</div><div class="big pos" id="pval">۰٪</div>
+            <div class="label" style="margin-top:10px">اندازه‌ی سفارش ← <b id="sizev" style="color:#fff">۰٪</b> اندازه‌ی پایه</div>
+            <div class="label" style="margin-top:4px">کمتر از ۵۵٪ ← سفارش ثبت نمی‌شود</div></div>
+        </div>
+        <div class="card" id="s5imp"><div class="label" style="margin-bottom:8px">مهم‌ترین عوامل تصمیم مدل (LightGBM کالیبره‌شده)</div><canvas id="imp" width="900" height="300"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6 agent -->
+  <div class="scene" id="s6">
+    <div class="kicker">هوش مصنوعی ۲ — Agentic AI</div>
+    <div class="h2">ایجنت Claude Opus 5.5 با ابزار: هر ۲۰ دقیقه بازار را بازبینی می‌کند</div>
+    <div class="row" style="margin-top:24px">
+      <div class="card" style="flex:1.25;height:640px;overflow:hidden" id="chat"></div>
+      <div class="col" style="flex:1">
+        <div class="card" id="pol"><div class="label">سیاست معاملاتی (خروجی ایجنت)</div><div id="polbody" style="font-size:25px;margin-top:10px"></div></div>
+        <div class="card" id="guard"><div class="label" style="margin-bottom:6px">سقف‌های سخت در کد (ایجنت نمی‌تواند عبور کند)</div>
+          <div class="check"><div class="ic">✓</div>اندازه‌ی سفارش هرگز بزرگ‌تر از قانون پایه</div>
+          <div class="check"><div class="ic">✓</div>عمق ورود حداقل ۸۰٪ مقدار قانون</div>
+          <div class="check"><div class="ic">✓</div>بدون دسترسی به حد ضرر و کلید توقف</div>
+          <div class="check"><div class="ic">✓</div>بی‌پاسخی ایجنت ← حالت محافظه‌کار</div></div>
+        <div class="note" id="agentnote"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7 risk -->
+  <div class="scene" id="s7">
+    <div class="kicker">مدیریت سرمایه و ریسک</div>
+    <div class="h2">ترمزهایی که هیچ هوش مصنوعی نمی‌تواند باز کند</div>
+    <div class="row" style="margin-top:20px">
+      <div class="card" style="width:820px" id="risklist"></div>
+      <div class="col" style="flex:1">
+        <div class="card"><div class="label">کلید توقف اضطراری (نمایش مفهومی)</div><canvas id="kill" width="820" height="360"></canvas></div>
+        <div class="card" style="display:flex;align-items:center;gap:26px"><canvas id="donut" width="200" height="200"></canvas>
+          <div><div class="big" style="font-size:48px">۲۰٪</div><div class="label">همیشه نقد — هیچ‌وقت با کل پول وارد نمی‌شود</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8 backtest -->
+  <div class="scene" id="s8">
+    <div class="kicker">بک‌تست walk-forward</div>
+    <div class="h2">آموزش روی ۶۰٪ اول، آزمون روی ۴۰٪ ندیده</div>
+    <div class="label" id="btmeta" style="margin-top:-4px"></div>
+    <div class="row" style="margin-top:22px" id="btrow"></div>
+  </div>
+
+  <!-- 9 monte carlo -->
+  <div class="scene" id="s9">
+    <div class="kicker">احتمالات</div>
+    <div class="h2">۲۰٬۰۰۰ شبیه‌سازی از یک چالش ۳ روزه</div>
+    <div class="row" style="margin-top:26px">
+      <div class="card" style="flex:1.6"><canvas id="mc" width="1050" height="560"></canvas></div>
+      <div class="col" style="flex:1" id="mcstats"></div>
+    </div>
+  </div>
+
+  <!-- 10 live / shadow -->
+  <div class="scene" id="s10">
+    <div class="kicker" id="livekick">اجرای ۳ روزه</div>
+    <div class="h2" id="liveh">ربات زنده: معامله‌ی منظم، افت کم، سود محقق‌شده به تومان</div>
+    <div class="row" style="margin-top:20px">
+      <div class="card" style="flex:1.45"><canvas id="eqlive" width="1000" height="430"></canvas>
+        <div class="row" style="margin-top:12px;gap:18px" id="livekpis"></div></div>
+      <div class="col" style="flex:1" id="loglist"></div>
+    </div>
+  </div>
+
+  <!-- 11 dashboard -->
+  <div class="scene" id="s11">
+    <div class="kicker">داشبورد و لاگ تصمیم</div>
+    <div class="h2">همه‌چیز شفاف: چرا خرید، چرا فروش، با چه احتمالی</div>
+    <div class="shot" id="shot1" style="left:110px;top:230px;width:1700px;height:720px"><img id="shotimg"></div>
+  </div>
+
+  <!-- 12 repro -->
+  <div class="scene" id="s12">
+    <div class="kicker">تکرارپذیری و استقرار</div>
+    <div class="h2">یک دستور برای هر کار — روی لیارا در چند دقیقه</div>
+    <div class="row" style="margin-top:26px">
+      <div class="term" style="flex:1.3;height:600px" id="term"></div>
+      <div class="card" style="flex:1" id="deliv"></div>
+    </div>
+  </div>
+
+  <!-- 13 outro -->
+  <div class="scene" id="s13" style="display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">
+    <div class="h1" style="font-size:110px" id="o1">پیشرو</div>
+    <div class="sub" style="font-size:38px;margin-top:14px;color:#fff" id="o2">جلوتر از بازار — همیشه با ترمز</div>
+    <div class="row" style="margin-top:46px;gap:18px;justify-content:center;width:100%" id="o3"></div>
+    <div class="label mono" style="margin-top:46px;font-size:26px" id="o4">github.com/imrx44/wallex</div>
+  </div>
+
+  <div id="chapters"></div>
+</div>
+
+<script>
+const D = window.DATA || {};
+const W = 1920, H = 1080;
+const fa = (x, d = 0) => (x == null || isNaN(x)) ? '—' : Number(x).toLocaleString('fa-IR', {maximumFractionDigits: d, minimumFractionDigits: d});
+const pct = (x, d = 1) => x == null ? '—' : (x > 0 ? '+' : (x < 0 ? '−' : '')) + fa(Math.abs(x), d) + '٪';
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = x => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const easeOut = x => 1 - Math.pow(1 - clamp(x), 3);
+const prog = (t, a, d) => clamp((t - a) / d);
+const $ = id => document.getElementById(id);
+
+// ---------------------------------------------------------------- timeline
+const SCENES = [
+  {id: 's1', a: 0, b: 13, ch: 'مقدمه'},
+  {id: 's2', a: 13, b: 31, ch: 'چالش'},
+  {id: 's3', a: 31, b: 78, ch: 'ایده'},
+  {id: 's4', a: 78, b: 104, ch: 'معماری'},
+  {id: 's5', a: 104, b: 138, ch: 'مدل ML'},
+  {id: 's6', a: 138, b: 176, ch: 'ایجنت Claude'},
+  {id: 's7', a: 176, b: 207, ch: 'ریسک'},
+  {id: 's8', a: 207, b: 236, ch: 'بک‌تست'},
+  {id: 's9', a: 236, b: 255, ch: 'احتمالات'},
+  {id: 's10', a: 255, b: 275, ch: 'اجرای ۳ روزه'},
+  {id: 's11', a: 275, b: 287, ch: 'داشبورد'},
+  {id: 's12', a: 287, b: 298, ch: 'اجرای مجدد'},
+  {id: 's13', a: 298, b: 306, ch: 'پایان'},
+];
+window.DURATION = 306;
+const CUES = [];
+const cue = (t, type) => CUES.push({t, type});
+SCENES.forEach((s, i) => { if (i) cue(s.a - 0.35, 'whoosh'); });
+window.CUES = CUES;
+
+// chapters bar
+(() => {
+  const el = $('chapters');
+  SCENES.slice(1, -1).forEach(s => {
+    const c = document.createElement('div'); c.className = 'c'; c.dataset.a = s.a; c.dataset.b = s.b;
+    c.innerHTML = `<div class="bar"><i></i></div><div class="t">${s.ch}</div>`; el.appendChild(c);
+  });
+  if (D.demo) { const b = $('badge'); b.style.display = 'block'; b.textContent = 'نسخه‌ی نمایشی — اعداد از اجرای کد روی داده‌ی مصنوعی'; }
+})();
+
+// ---------------------------------------------------------------- background
+const bg = $('bg').getContext('2d');
+const P = Array.from({length: 90}, (_, i) => ({x: (i * 397) % W, y: (i * 619) % H, s: 0.6 + (i % 7) / 5, v: 6 + (i % 5) * 3}));
+function drawBg(t) {
+  const g = bg.createRadialGradient(W * .75, H * .15, 50, W * .6, H * .5, 1400);
+  g.addColorStop(0, '#0f1f45'); g.addColorStop(.5, '#081127'); g.addColorStop(1, '#04070f');
+  bg.fillStyle = g; bg.fillRect(0, 0, W, H);
+  bg.strokeStyle = 'rgba(80,120,200,0.06)'; bg.lineWidth = 1;
+  const off = (t * 12) % 80;
+  for (let x = -80 + off; x < W; x += 80) { bg.beginPath(); bg.moveTo(x, 0); bg.lineTo(x, H); bg.stroke(); }
+  for (let y = -80 + off; y < H; y += 80) { bg.beginPath(); bg.moveTo(0, y); bg.lineTo(W, y); bg.stroke(); }
+  for (const p of P) {
+    const y = (p.y - t * p.v) % H, yy = y < 0 ? y + H : y;
+    bg.fillStyle = `rgba(120,200,255,${0.12 + 0.1 * Math.sin(t + p.x)})`;
+    bg.beginPath(); bg.arc(p.x, yy, p.s, 0, 7); bg.fill();
+  }
+  // faint ticker wave
+  bg.strokeStyle = 'rgba(34,197,94,0.07)'; bg.lineWidth = 3; bg.beginPath();
+  for (let x = 0; x <= W; x += 8) { const y = H * .78 + Math.sin(x / 140 + t * .6) * 30 + Math.sin(x / 47 + t) * 10; x ? bg.lineTo(x, y) : bg.moveTo(x, y); }
+  bg.stroke();
+}
+
+// ---------------------------------------------------------------- helpers
+function show(el, p, dy = 30, sc = 0) {
+  if (!el) return; const e = easeOut(p);
+  el.style.opacity = e; el.style.transform = `translateY(${(1 - e) * dy}px) scale(${1 - (1 - e) * sc})`;
+}
+function counter(el, p, val, fmt) { el.textContent = fmt(val * easeOut(p)); }
+function lineChart(ctx, w, h, series, opt = {}) {
+  ctx.clearRect(0, 0, w, h);
+  const pad = opt.pad || {l: 70, r: 20, t: 20, b: 40};
+  const all = series.flatMap(s => s.pts.map(p => p[1]));
+  let lo = opt.lo ?? Math.min(...all), hi = opt.hi ?? Math.max(...all); const pd = (hi - lo) * .08 || 1; lo -= pd; hi += pd;
+  const xs = series.flatMap(s => s.pts.map(p => p[0])); const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const X = x => pad.l + (x - x0) / ((x1 - x0) || 1) * (w - pad.l - pad.r);
+  const Y = y => h - pad.b - (y - lo) / (hi - lo) * (h - pad.t - pad.b);
+  ctx.strokeStyle = 'rgba(143,163,199,.15)'; ctx.lineWidth = 1; ctx.fillStyle = '#8fa3c7'; ctx.font = '18px Vazirmatn'; ctx.textAlign = 'left';
+  for (let i = 0; i <= 4; i++) { const v = lo + (hi - lo) * i / 4; const y = Y(v); ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+    if (opt.ylab) ctx.fillText(opt.ylab(v), 4, y + 6); }
+  for (const s of series) {
+    const n = Math.max(2, Math.floor(s.pts.length * clamp(s.p ?? 1)));
+    ctx.strokeStyle = s.color; ctx.lineWidth = s.w || 3; ctx.setLineDash(s.dash || []); ctx.beginPath();
+    s.pts.slice(0, n).forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1]))); ctx.stroke(); ctx.setLineDash([]);
+    if (s.fill && n > 2) { ctx.lineTo(X(s.pts[n - 1][0]), h - pad.b); ctx.lineTo(X(s.pts[0][0]), h - pad.b); ctx.closePath();
+      const g = ctx.createLinearGradient(0, pad.t, 0, h); g.addColorStop(0, s.fill); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fill(); }
+    if (s.glow && n > 1) { const p = s.pts[n - 1]; ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 7, 0, 7); ctx.fill(); }
+  }
+  return {X, Y};
+}
+
+// ---------------------------------------------------------------- scene 1: logo
+function drawLogo(t) {
+  const c = $('logo').getContext('2d'); c.clearRect(0, 0, 360, 360);
+  const p = easeOut(prog(t, 0.3, 1.6));
+  c.save(); c.translate(180, 190);
+  c.strokeStyle = 'rgba(34,211,238,.35)'; c.lineWidth = 4;
+  c.beginPath(); c.arc(0, 0, 150, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); c.stroke();
+  c.strokeStyle = '#22c55e'; c.lineWidth = 16; c.lineCap = 'round'; c.lineJoin = 'round';
+  const pts = [[-95, 55], [-35, 5], [5, 35], [85, -55]];
+  const n = p * 3; c.beginPath(); c.moveTo(...pts[0]);
+  for (let i = 1; i <= 3; i++) { const k = clamp(n - (i - 1)); if (k <= 0) break; const a = pts[i - 1], b = pts[i];
+    c.lineTo(a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k); }
+  c.shadowColor = '#22c55e'; c.shadowBlur = 25; c.stroke();
+  if (p > .95) { c.fillStyle = '#22c55e'; c.beginPath(); c.moveTo(85, -55); c.lineTo(45, -52); c.lineTo(80, -18); c.closePath(); c.fill(); }
+  c.restore();
+}
+
+// ---------------------------------------------------------------- scene 2
+(() => {
+  const cards = [['۵,۰۰۰,۰۰۰', 'تومان سرمایه‌ی اعتباری والکس', 'cya'], ['۳ روز', 'معامله‌ی کاملاً خودکار', 'blu'],
+                 ['تومان', 'سود باید در پایان به تومان محقق شود', 'pos'], ['افت', 'کنترل ضرر، بخشی از امتیاز است', 'amb']];
+  $('s2cards').innerHTML = cards.map((c, i) => `<div class="card" id="s2c${i}" style="flex:1;text-align:center;padding:40px 20px">
+    <div class="big ${c[2]}" style="font-size:54px">${c[0]}</div><div class="label" style="margin-top:12px;font-size:24px">${c[1]}</div></div>`).join('');
+  cards.forEach((_, i) => cue(13 + 1.2 + i * 1.1, 'pop'));
+})();
+
+// ---------------------------------------------------------------- scene 3: idea chart
+const EX = D.example && D.example.path && D.example.path.length > 20 ? D.example : null;
+const idea = (() => {
+  if (EX) return {pts: EX.path.map(p => [p[0], p[1]]), fair: EX.path.map(p => [p[0], p[2]]), base: EX.path.map(p => [p[0], p[3]]),
+                  buyT: EX.buy_t, buyP: EX.buy_px, sellT: EX.sell_t, sellP: EX.sell_px, edge: EX.edge, ret: EX.ret, prob: EX.prob, pnl: EX.pnl};
+  const pts = [], fair = [], base = []; let m = 100;
+  for (let i = 0; i < 150; i++) { const f = 100 + Math.sin(i / 18) * 1.2 + i * .01; const b = f * 0.985;
+    let px = b * (1 + Math.sin(i / 5) * .0015); if (i > 60 && i < 80) px = b * (1 - .012 * Math.sin((i - 60) / 20 * Math.PI));
+    pts.push([i, px]); fair.push([i, f]); base.push([i, b]); }
+  return {pts, fair, base, buyT: 66, buyP: pts[66][1], sellT: 82, sellP: base[82][1], edge: 1.0, ret: .6, prob: .74, pnl: 6000};
+})();
+cue(31 + 2 + 16 * ((idea.pts.findIndex(q => q[0] >= idea.buyT)) / idea.pts.length), 'pop');
+cue(31 + 2 + 16 * ((idea.pts.findIndex(q => q[0] >= idea.sellT)) / idea.pts.length), 'chime');
+const s3b = [
+  ['قیمت والکس با تأخیر از بازار جهانی پیروی می‌کند', 'دفتر سفارش کم‌عمق است؛ هر فروش بزرگ قیمت را موقتاً پایین می‌کشد'],
+  ['ربات فقط وقتی می‌خرد که قیمت به‌اندازه‌ی کافی زیر «پریمیوم عادی» باشد', 'عمق لازم با کارمزد و نوسان همان بازار تنظیم می‌شود'],
+  ['فروش در بازگشت به حالت عادی، هرگز زیر سربه‌سر + کارمزد', 'این پیش‌بینی جهت بازار نیست؛ شکار یک ناکارآمدی ساختاری است'],
+];
+$('s3b').innerHTML = s3b.map((b, i) => `<div class="bullet" id="s3b${i}"><div class="dot"></div><div><b>${b[0]}</b><div class="label">${b[1]}</div></div></div>`).join('');
+function drawIdea(lt) {
+  const c = $('ideaChart').getContext('2d');
+  const p = prog(lt, 2, 16);
+  const lvl = idea.base.map(q => [q[0], q[1] * (1 - (idea.edge || 1) / 100)]);
+  const {X, Y} = lineChart(c, 1000, 600, [
+    {pts: idea.base, color: '#f59e0b', w: 3, p},
+    {pts: lvl, color: 'rgba(34,197,94,.75)', w: 2.5, dash: [10, 8], p},
+    {pts: idea.pts, color: '#e8eefc', w: 3.5, p, glow: true, fill: 'rgba(232,238,252,.06)'},
+  ], {pad: {l: 20, r: 20, t: 120, b: 30}});
+  c.direction = 'rtl'; c.textAlign = 'right'; c.font = '22px Vazirmatn';
+  const legend = [['قیمت والکس', '#e8eefc', []], ['قیمت عادی = بایننس × تتر × (۱ + پریمیوم یادگرفته‌شده)', '#f59e0b', []], ['سطح خرید (عمق لازم زیر حالت عادی)', '#22c55e', [8, 6]]];
+  if (p > .05) legend.forEach((l, i) => { const y = 34 + i * 32; c.fillStyle = '#cfe0ff'; c.fillText(l[0], 940, y);
+    c.strokeStyle = l[1]; c.lineWidth = 4; c.setLineDash(l[2]); c.beginPath(); c.moveTo(955, y - 7); c.lineTo(985, y - 7); c.stroke(); c.setLineDash([]); });
+  const tMax = idea.pts[Math.floor((idea.pts.length - 1) * clamp(p))][0];
+  const mark = (tx, px, color, txt, sub, k, below) => {
+    if (tMax < tx) return; const a = easeOut(k); const x = X(tx), y = Y(px);
+    c.globalAlpha = .25; c.fillStyle = color; c.beginPath(); c.arc(x, y, 22 + 8 * Math.sin(lt * 5), 0, 7); c.fill();
+    c.globalAlpha = 1; c.beginPath(); c.arc(x, y, 10, 0, 7); c.fill();
+    let ly = below ? y + 70 : y - 150; ly = Math.max(130, Math.min(ly, 600 - 90));
+    c.strokeStyle = color; c.lineWidth = 2; c.beginPath(); c.moveTo(x, y); c.lineTo(x, ly + (ly > y ? 0 : 80)); c.stroke();
+    c.font = '21px Vazirmatn'; const w = Math.max(c.measureText(sub).width, 120) + 36;
+    const bx = Math.max(10, Math.min(x - w / 2, 990 - w));
+    c.globalAlpha = a; c.fillStyle = 'rgba(6,11,24,.92)'; c.strokeStyle = color; c.lineWidth = 2;
+    c.beginPath(); c.roundRect(bx, ly, w, 80, 14); c.fill(); c.stroke();
+    c.textAlign = 'center'; c.fillStyle = color; c.font = 'bold 28px Vazirmatn'; c.fillText(txt, bx + w / 2, ly + 34);
+    c.font = '21px Vazirmatn'; c.fillStyle = '#e8eefc'; c.fillText(sub, bx + w / 2, ly + 64); c.globalAlpha = 1;
+  };
+  const tb = 2 + 16 * (idea.pts.findIndex(q => q[0] >= idea.buyT) / idea.pts.length);
+  const ts = 2 + 16 * (idea.pts.findIndex(q => q[0] >= idea.sellT) / idea.pts.length);
+  mark(idea.buyT, idea.buyP, '#22c55e', 'خرید', `${fa(idea.edge, 2)}٪ زیر حالت عادی · احتمال ML: ${idea.prob ? fa(idea.prob * 100, 0) + '٪' : '—'}`, prog(lt, tb, 1), true);
+  mark(idea.sellT, idea.sellP, '#22d3ee', 'فروش', `بازگشت به حالت عادی · سود ${pct(idea.ret, 2)} بعد از کارمزد`, prog(lt, ts, 1), false);
+  if (tMax >= idea.buyT) cueOnce('buy');
+}
+const _cues = {}; function cueOnce(k) { _cues[k] = 1; }
+
+// ---------------------------------------------------------------- scene 4: architecture
+const NODES = [
+  ['wx', 'والکس', 'همه‌ی بازارها، هر ۲ ثانیه', 110, 250], ['ws', 'وب‌سوکت والکس', 'عمق و معاملات زنده', 110, 420],
+  ['bn', 'بایننس', 'قیمت جهانی (رهبر)', 110, 590], ['nb', 'نوبیتکس', 'کنترل صحت مرجع‌ها', 110, 760],
+  ['pe', 'موتور پریمیوم', 'قیمت منصفانه، پریمیوم عادی، گیت‌ها', 560, 470],
+  ['ml', 'مدل ML', 'احتمال موفقیت هر سفارش', 990, 300], ['ag', 'ایجنت Claude', 'سیاست بازارها و ریسک', 990, 640],
+  ['rk', 'مدیر ریسک', 'قوانین سخت، خارج از AI', 1420, 300], ['ex', 'اجرای سفارش', 'Wallex API · میکر/اسنایپر', 1420, 520],
+  ['lg', 'لاگ تصمیم و داشبورد', 'دلیل هر خرید و فروش', 1420, 740],
+];
+const EDGES = [['wx', 'pe'], ['ws', 'pe'], ['bn', 'pe'], ['nb', 'pe'], ['pe', 'ml'], ['pe', 'ag'], ['ml', 'rk'], ['ag', 'rk'], ['rk', 'ex'], ['ex', 'lg'], ['ag', 'lg']];
+$('archNodes').innerHTML = NODES.map(n => `<div class="node" id="n_${n[0]}" style="right:${n[3]}px;top:${n[4]}px">${n[1]}<small>${n[2]}</small></div>`).join('');
+NODES.forEach((n, i) => cue(78 + 1 + i * .55, 'tick'));
+function center(id) { const n = NODES.find(x => x[0] === id); return [W - n[3] - 150, n[4] + 45]; }
+function drawArch(lt) {
+  const c = $('archEdges').getContext('2d'); c.clearRect(0, 0, W, H);
+  NODES.forEach((n, i) => show($('n_' + n[0]), prog(lt, 1 + i * .55, .7), 20, .1));
+  EDGES.forEach((e, i) => {
+    const k = prog(lt, 4 + i * .4, .8); if (k <= 0) return;
+    const [x1, y1] = center(e[0]), [x2, y2] = center(e[1]);
+    c.strokeStyle = 'rgba(34,211,238,.35)'; c.lineWidth = 3; c.beginPath(); c.moveTo(x1, y1);
+    c.lineTo(x1 + (x2 - x1) * easeOut(k), y1 + (y2 - y1) * easeOut(k)); c.stroke();
+    if (k >= 1) for (let j = 0; j < 3; j++) { const f = ((lt * .45 + j / 3 + i * .13) % 1);
+      c.fillStyle = j % 2 ? '#22c55e' : '#22d3ee'; c.shadowColor = c.fillStyle; c.shadowBlur = 14;
+      c.beginPath(); c.arc(x1 + (x2 - x1) * f, y1 + (y2 - y1) * f, 6, 0, 7); c.fill(); c.shadowBlur = 0; }
+  });
+}
+
+// ---------------------------------------------------------------- scene 5: ML
+const FEATS = ['عمق تخفیف', 'نوسان پریمیوم', 'تغییر رژیم نوسان', 'پریمیوم عادی', 'فاصله‌ی فعلی', 'حرکت ۵ دقیقه‌ای بایننس', 'حرکت ۱۵ دقیقه‌ای بایننس', 'حرکت ۱ ساعته‌ی بایننس',
+  'حرکت ۱۵ دقیقه‌ای والکس', 'حرکت ۱ ساعته‌ی والکس', 'حرکت ۱۵ دقیقه‌ای تتر', 'حرکت ۱ ساعته‌ی تتر', 'حجم ۲۴ ساعته', 'نرخ برگشت افت‌های قبلی', 'تعداد افت‌های ۳ روز', 'ساعت روز (سینوسی)', 'ساعت روز (کسینوسی)'];
+$('chips').innerHTML = FEATS.map((f, i) => `<span class="chip" id="chip${i}">${f}</span>`).join('');
+FEATS.forEach((_, i) => cue(104 + 1.2 + i * .22, 'tick'));
+const FA_FEAT = {edge: 'عمق تخفیف', std: 'نوسان پریمیوم', std_ratio: 'تغییر رژیم نوسان', baseline: 'پریمیوم عادی', dev_now: 'فاصله‌ی فعلی از حالت عادی',
+  ref_ret_5: 'حرکت ۵ دقیقه‌ای بایننس', ref_ret_15: 'حرکت ۱۵ دقیقه‌ای بایننس', ref_ret_60: 'حرکت ۱ ساعته‌ی بایننس', mkt_ret_15: 'حرکت ۱۵ دقیقه‌ای والکس',
+  mkt_ret_60: 'حرکت ۱ ساعته‌ی والکس', usdt_ret_15: 'حرکت ۱۵ دقیقه‌ای تتر', usdt_ret_60: 'حرکت ۱ ساعته‌ی تتر', log_vol_24h: 'حجم ۲۴ ساعته',
+  revert_rate: 'نرخ برگشت افت‌های قبلی', n_dips: 'تعداد افت‌ها', hour_sin: 'ساعت روز', hour_cos: 'ساعت روز'};
+const BT = (D.backtest || []);
+const BTZ = BT.find(b => b.maker === 0) || BT[0] || {};
+const IMP = (BTZ.importance || []).slice(0, 7);
+const PEX = idea.prob || .74;
+function drawML(lt) {
+  FEATS.forEach((_, i) => show($('chip' + i), prog(lt, 1.2 + i * .22, .5), 14, .2));
+  show($('s5g'), prog(lt, 6, 1)); show($('s5imp'), prog(lt, 9, 1));
+  const g = $('gauge').getContext('2d'); g.clearRect(0, 0, 380, 240);
+  const pv = .5 + (PEX - .5) * easeOut(prog(lt, 7, 3));
+  g.lineWidth = 26; g.lineCap = 'round';
+  g.strokeStyle = 'rgba(143,163,199,.18)'; g.beginPath(); g.arc(190, 200, 150, Math.PI, 2 * Math.PI); g.stroke();
+  g.strokeStyle = '#ef4444'; g.beginPath(); g.arc(190, 200, 150, Math.PI, Math.PI + Math.PI * .1); g.stroke();
+  const gr = g.createLinearGradient(40, 0, 340, 0); gr.addColorStop(0, '#f59e0b'); gr.addColorStop(1, '#22c55e');
+  g.strokeStyle = gr; g.beginPath(); g.arc(190, 200, 150, Math.PI + Math.PI * .1, Math.PI + Math.PI * pv); g.stroke();
+  const ang = Math.PI + Math.PI * pv; g.strokeStyle = '#fff'; g.lineWidth = 6; g.beginPath(); g.moveTo(190, 200);
+  g.lineTo(190 + Math.cos(ang) * 120, 200 + Math.sin(ang) * 120); g.stroke(); g.fillStyle = '#fff'; g.beginPath(); g.arc(190, 200, 12, 0, 7); g.fill();
+  $('pval').textContent = fa(pv * 100, 0) + '٪';
+  const size = pv < .55 ? 0 : .5 + .5 * Math.min(1, (pv - .55) / (.72 - .55));
+  $('sizev').textContent = fa(size * 100, 0) + '٪';
+  const c = $('imp').getContext('2d'); c.clearRect(0, 0, 900, 300);
+  const items = IMP.length ? IMP : [['revert_rate', 5], ['ref_ret_15', 4], ['std', 3], ['edge', 2.5], ['usdt_ret_15', 2], ['std_ratio', 1.5], ['mkt_ret_15', 1]];
+  const mx = Math.max(...items.map(x => x[1]));
+  items.forEach((it, i) => { const k = easeOut(prog(lt, 9.5 + i * .3, 1.2)); const w = 600 * it[1] / mx * k;
+    c.fillStyle = '#cfe0ff'; c.font = '21px Vazirmatn'; c.textAlign = 'right'; c.direction = 'rtl'; c.fillText(FA_FEAT[it[0]] || it[0], 890, 30 + i * 40);
+    const gr2 = c.createLinearGradient(640 - w, 0, 640, 0); gr2.addColorStop(0, '#22d3ee'); gr2.addColorStop(1, '#3b82f6');
+    c.fillStyle = gr2; c.beginPath(); c.roundRect(640 - w, 12 + i * 40, w, 24, 8); c.fill(); });
+}
+
+// ---------------------------------------------------------------- scene 6: agent
+const AG = (D.agent && D.agent.length) ? D.agent.find(a => (a.actions || []).some(x => x.allow === false)) || D.agent[0] : null;
+const chatItems = (() => {
+  const tools = AG ? AG.tools : ['get_portfolio_status', 'get_market_overview', 'get_opportunities', 'get_recent_trades', 'set_market_policy', 'set_risk_mode', 'finish'];
+  const items = [{k: 'say', txt: 'بازبینی زمان‌بندی‌شده شروع شد — وضعیت حساب و بازار را بررسی می‌کنم.'}];
+  tools.forEach(tn => { if (tn.startsWith('get_')) items.push({k: 'tool', txt: `▶ ${tn}()`}); });
+  (AG ? AG.actions : [{tool: 'set_market_policy', symbol: 'XTMN', allow: false, reason: 'افت‌ها برنمی‌گردند'}, {tool: 'set_risk_mode', mode: 'normal'}])
+    .forEach(a => items.push({k: 'tool', txt: `✎ ${a.tool}(${[a.symbol, a.mode, a.allow === false ? 'allow=false' : ''].filter(Boolean).join(', ')})`}));
+  items.push({k: 'say', txt: AG ? AG.rationale : 'بازار آرام است؛ حالت عادی ادامه دارد و یک بازار پرریسک مسدود شد.'});
+  return items;
+})();
+chatItems.forEach((_, i) => cue(138 + 2 + i * 2.3, i === chatItems.length - 1 ? 'chime' : 'type'));
+$('chat').innerHTML = `<div class="label" style="margin-bottom:8px">مکالمه‌ی ایجنت با ابزارها (${AG ? AG.model : 'anthropic/claude-opus-5.5'})</div>` +
+  chatItems.map((c, i) => `<div class="bubble ${c.k}" id="cb${i}"></div>`).join('');
+$('agentnote').textContent = D.demo ? 'در این نسخه‌ی نمایشی، نتایج ابزارها واقعی‌اند ولی انتخاب‌های مدل شبیه‌سازی شده‌اند (بدون دسترسی به لیارا).' : '';
+function drawAgent(lt) {
+  chatItems.forEach((c, i) => { const a = 2 + i * 2.3; const el = $('cb' + i); const k = prog(lt, a, 1.6);
+    el.style.display = k > 0 ? 'block' : 'none'; el.style.opacity = easeOut(k * 3);
+    el.textContent = c.txt.slice(0, Math.ceil(c.txt.length * easeOut(k))); });
+  const pol = AG ? AG.actions : [];
+  const mode = (pol.find(a => a.mode) || {}).mode || 'normal';
+  const blocked = pol.filter(a => a.allow === false).map(a => a.symbol);
+  const k = prog(lt, 2 + chatItems.length * 2.3 - 3, 1);
+  show($('pol'), prog(lt, 1, 1)); show($('guard'), prog(lt, 4, 1));
+  $('polbody').innerHTML = `حالت ریسک: <b class="${mode === 'normal' ? 'pos' : 'amb'}">${k > 0 ? mode : '…'}</b><br>` +
+    `بازارهای مسدود: <b class="neg">${k > 0 ? (blocked.join('، ') || 'هیچ') : '…'}</b>`;
+}
+
+// ---------------------------------------------------------------- scene 7: risk
+const RISK = [['حد ضرر هر پوزیشن', '۲.۵٪'], ['ریسک هر معامله تا حد ضرر', '۰.۸٪ سرمایه'], ['حداکثر در یک بازار', '۲۵٪'],
+  ['حداکثر پوزیشن هم‌زمان', '۴'], ['حجم سفارش', 'حداکثر ۳۰٪ عمق دفتر'], ['ضرر روزانه', '۲.۵٪ ← توقف تا فردا'],
+  ['افت از سقف', '۶٪ ← تبدیل همه به تومان'], ['۳ ضرر پیاپی', '۴۵ دقیقه استراحت'], ['داده‌ی کهنه یا خطای API', 'لغو سفارش‌ها'],
+  ['۲ ساعت مانده به پایان', 'ورود ممنوع؛ ۴۵ دقیقه مانده: همه به تومان']];
+$('risklist').innerHTML = RISK.map((r, i) => `<div class="check" id="rk${i}"><div class="ic">✓</div><div style="flex:1">${r[0]}</div><b class="amb">${r[1]}</b></div>`).join('');
+RISK.forEach((_, i) => cue(176 + 1.5 + i * .9, 'tick'));
+const KILL = (() => { const pts = []; let v = 100, peak = 100, hit = -1;
+  for (let i = 0; i < 120; i++) {
+    if (hit < 0) { v += i < 40 ? .12 + Math.sin(i / 3) * .35 : -(.28 + Math.sin(i * 1.7) * .22); peak = Math.max(peak, v);
+      if (v <= peak * .94) { v = peak * .94; hit = i; } }
+    pts.push([i, v]); }
+  return {pts, hit, peak}; })();
+cue(176 + 10 + 7 * (KILL.hit / 120), 'alarm');
+function drawRisk(lt) {
+  RISK.forEach((_, i) => show($('rk' + i), prog(lt, 1.5 + i * .9, .6), 0, 0));
+  const c = $('kill').getContext('2d'); c.clearRect(0, 0, 820, 360);
+  const p = prog(lt, 10, 7); const n = Math.max(2, Math.floor(120 * p));
+  const vals = KILL.pts.map(q => q[1]); const lo = Math.min(...vals) - 1.2, hi = Math.max(...vals) + 1;
+  const X = i => 30 + i / 119 * 770, Y = v => 340 - (v - lo) / (hi - lo) * 300;
+  const killY = KILL.peak * .94;
+  c.strokeStyle = 'rgba(239,68,68,.85)'; c.setLineDash([10, 8]); c.lineWidth = 2; c.beginPath(); c.moveTo(30, Y(killY)); c.lineTo(800, Y(killY)); c.stroke(); c.setLineDash([]);
+  c.direction = 'rtl'; c.fillStyle = '#fca5a5'; c.font = '19px Vazirmatn'; c.textAlign = 'right'; c.fillText('خط افت ۶٪ از سقف', 800, Y(killY) + 26);
+  c.lineWidth = 4;
+  for (let i = 1; i < n; i++) { c.strokeStyle = (KILL.hit >= 0 && i > KILL.hit) ? '#22c55e' : '#e8eefc';
+    c.beginPath(); c.moveTo(X(i - 1), Y(KILL.pts[i - 1][1])); c.lineTo(X(i), Y(KILL.pts[i][1])); c.stroke(); }
+  if (KILL.hit >= 0 && n > KILL.hit) { const x = X(KILL.hit), y = Y(KILL.pts[KILL.hit][1]);
+    c.fillStyle = '#ef4444'; c.beginPath(); c.arc(x, y, 10 + 4 * Math.sin(lt * 8), 0, 7); c.fill();
+    c.fillStyle = '#fff'; c.font = 'bold 24px Vazirmatn'; c.textAlign = 'center'; c.fillText('⛔ توقف اضطراری — همه به تومان؛ ضرر قفل شد', 415, 40); }
+  const d = $('donut').getContext('2d'); d.clearRect(0, 0, 200, 200); const k = easeOut(prog(lt, 5, 2));
+  d.lineWidth = 30; d.strokeStyle = 'rgba(59,130,246,.35)'; d.beginPath(); d.arc(100, 100, 70, 0, 7); d.stroke();
+  d.strokeStyle = '#22c55e'; d.beginPath(); d.arc(100, 100, 70, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * .2 * k); d.stroke();
+}
+
+// ---------------------------------------------------------------- scene 8: backtest
+$('btmeta').textContent = D.backtest_meta || '';
+$('btrow').innerHTML = BT.slice(0, 2).map((b, i) => `<div class="card" style="flex:1" id="bt${i}">
+  <div style="font-size:26px;font-weight:700">${b.maker === 0 ? 'سناریوی کارمزد صفر' : `کارمزد ${fa(b.maker * 100, 2)}٪ / ${fa(b.taker * 100, 2)}٪`}</div>
+  <canvas id="btc${i}" width="800" height="330" style="margin-top:6px"></canvas>
+  <div class="row" style="gap:14px;margin-top:8px">
+    <div class="kpi"><div class="label">بازده (با ML)</div><div class="big ${b.ml.return_pct >= 0 ? 'pos' : 'neg'}" style="font-size:42px" id="btr${i}">—</div></div>
+    <div class="kpi"><div class="label">بیشترین افت</div><div class="big amb" style="font-size:42px" id="btd${i}">—</div></div>
+    <div class="kpi"><div class="label">معامله / نرخ برد</div><div class="big" style="font-size:42px" id="btn${i}">—</div></div>
+  </div><div class="label" style="margin-top:6px">خاکستری: فقط قواعد · سبز: قواعد + مدل ML · بازده فقط قواعد: ${pct(b.rules.return_pct)}</div></div>`).join('');
+BT.slice(0, 2).forEach((_, i) => cue(207 + 3 + i * 4 + 4, 'pop'));
+function drawBT(lt) {
+  BT.slice(0, 2).forEach((b, i) => {
+    show($('bt' + i), prog(lt, 1 + i * 1.2, 1));
+    const cr = b.curves || {}; const p = prog(lt, 2.5 + i * 1.2, 6);
+    const norm = s => (s || []).map((q, j, a) => [(q[0] - a[0][0]) / 86400, (q[1] / 5e6 - 1) * 100]);
+    const series = [{pts: norm(cr.rules_test), color: 'rgba(143,163,199,.7)', w: 3, p}, {pts: norm(cr.ml_test), color: '#22c55e', w: 4, p, glow: true, fill: 'rgba(34,197,94,.12)'}].filter(s => s.pts.length > 1);
+    if (series.length) lineChart($('btc' + i).getContext('2d'), 800, 330, series, {ylab: v => pct(v, 0), pad: {l: 80, r: 10, t: 15, b: 20}});
+    const k = prog(lt, 7 + i * 1.2, 2.5);
+    counter($('btr' + i), k, b.ml.return_pct || 0, v => pct(v, 1));
+    counter($('btd' + i), k, b.ml.max_drawdown_pct || 0, v => fa(v, 1) + '٪');
+    $('btn' + i).textContent = `${fa((b.ml.trades || 0) * easeOut(k))} / ${fa((b.ml.win_rate_pct || 0) * easeOut(k), 0)}٪`;
+  });
+}
+
+// ---------------------------------------------------------------- scene 9: Monte Carlo
+const MC = (BT.find(b => b.mc_hist && b.mc_hist.counts) || {}).mc_hist ? BT.map(b => b).filter(b => b.mc_hist && b.mc_hist.counts) : [];
+const MCB = MC.find(b => b.maker === 0) || MC[0];
+$('mcstats').innerHTML = MCB ? `
+  <div class="card" id="mc1"><div class="label">احتمال بازده مثبت در ۳ روز</div><div class="big pos glow" id="mcp">—</div></div>
+  <div class="card" id="mc2"><div class="label">میانه‌ی بازده ۳ روزه</div><div class="big" id="mcm">—</div></div>
+  <div class="card" id="mc3"><div class="label">بازه‌ی ۹۰٪ (بدترین ۵٪ تا بهترین ۵٪)</div><div class="big" style="font-size:40px" id="mcr">—</div></div>
+  <div class="label">${MCB.maker === 0 ? 'سناریوی کارمزد صفر' : 'با کارمزد'} · بوت‌استرپ از معاملات خارج از نمونه</div>
+  ${MC.filter(b => b !== MCB).map(b => `<div class="label" style="color:#fcd34d">سناریوی کارمزد ${fa(b.maker * 100, 2)}٪: احتمال مثبت ${fa(b.mc_hist.p_pos, 0)}٪ · میانه ${pct(b.mc_hist.median, 1)} — به همین دلیل ربات کارمزد واقعی را از اولین معامله تشخیص می‌دهد و عمق ورود را با آن تنظیم می‌کند</div>`).join('')}` : '<div class="card">داده‌ی بک‌تست موجود نیست</div>';
+cue(236 + 6, 'chime');
+function drawMC(lt) {
+  if (!MCB) return; const h = MCB.mc_hist, c = $('mc').getContext('2d'); c.clearRect(0, 0, 1050, 560);
+  const mx = Math.max(...h.counts); const n = h.counts.length; const bw = 960 / n;
+  const zeroX = 60 + (0 - h.edges[0]) / (h.edges[n] - h.edges[0]) * 960;
+  h.counts.forEach((v, i) => { const k = easeOut(prog(lt, 1 + i * .05, 1.2)); const bh = 440 * v / mx * k; const x = 60 + i * bw;
+    const mid = (h.edges[i] + h.edges[i + 1]) / 2; c.fillStyle = mid >= 0 ? '#22c55e' : '#ef4444'; c.globalAlpha = .85;
+    c.beginPath(); c.roundRect(x + 2, 490 - bh, bw - 4, bh, 4); c.fill(); c.globalAlpha = 1; });
+  if (zeroX > 60 && zeroX < 1020) { c.strokeStyle = '#fff'; c.setLineDash([8, 6]); c.beginPath(); c.moveTo(zeroX, 30); c.lineTo(zeroX, 490); c.stroke(); c.setLineDash([]);
+    c.fillStyle = '#fff'; c.font = '20px Vazirmatn'; c.textAlign = 'center'; c.fillText('سربه‌سر', zeroX, 22); }
+  c.fillStyle = '#8fa3c7'; c.font = '19px Vazirmatn'; c.textAlign = 'center';
+  for (let i = 0; i <= n; i += 6) c.fillText(pct(h.edges[i], 1), 60 + i * bw, 520);
+  c.fillText('بازده ۳ روزه', 540, 552);
+  show($('mc1'), prog(lt, 4, 1)); show($('mc2'), prog(lt, 5, 1)); show($('mc3'), prog(lt, 6, 1));
+  counter($('mcp'), prog(lt, 4, 3), h.p_pos, v => fa(v, 1) + '٪'); counter($('mcm'), prog(lt, 5, 2.5), h.median, v => pct(v, 2));
+  $('mcr').textContent = `${pct(h.p5, 1)}  تا  ${pct(h.p95, 1)}`;
+}
+
+// ---------------------------------------------------------------- scene 10: 3-day run
+$('livekick').textContent = D.mode === 'live' ? 'اجرای واقعی در چالش' : 'اجرای ۳ روزه (تست سایه)';
+const LK = [['بازده محقق‌شده', D.return_pct, v => pct(v, 2), D.return_pct >= 0 ? 'pos' : 'neg'], ['بیشترین افت', D.max_dd_pct, v => fa(v, 2) + '٪', 'amb'],
+  ['معاملات', D.n_trades, v => fa(v), ''], ['نرخ برد', D.win_rate, v => fa(v, 0) + '٪', 'pos'],
+  ['حجم (میلیون تومان)', D.volume, v => fa(v / 1e6, 0), 'cya'], ['معامله در روز', D.trades_per_day, v => fa(v, 1), '']];
+$('livekpis').innerHTML = LK.map((k, i) => `<div style="flex:1"><div class="label" style="font-size:18px">${k[0]}</div><div class="big ${k[3]}" style="font-size:36px" id="lk${i}">—</div></div>`).join('');
+$('loglist').innerHTML = `<div class="label">لاگ تصمیم (نمونه‌ی واقعی از اجرا)</div>` + [...(D.log_samples || []).filter(l => l.kind !== 'sell_fill').slice(0, 2), ...(D.log_samples || []).filter(l => l.kind === 'sell_fill').slice(0, 2)].map((l, i) =>
+  `<div class="logline ${l.kind === 'sell_fill' ? 's' : ''}" id="lg${i}"><div class="m">${l.time} · ${l.symbol} · ${l.kind === 'sell_fill' ? 'فروش' : 'سفارش خرید'}</div>${l.reason.slice(0, 135)}…</div>`).join('');
+LK.forEach((_, i) => cue(255 + 6 + i * .5, 'tick')); cue(255 + 9, 'chime');
+function drawLive(lt) {
+  const eq = (D.equity || []).map(p => [p[0], p[1]]);
+  if (eq.length > 1) lineChart($('eqlive').getContext('2d'), 1000, 430, [{pts: eq, color: '#22c55e', w: 4, p: prog(lt, 1, 6), glow: true, fill: 'rgba(34,197,94,.15)'},
+      {pts: [[eq[0][0], D.capital], [eq[eq.length - 1][0], D.capital]], color: 'rgba(143,163,199,.5)', w: 2, dash: [8, 8]}],
+    {ylab: v => fa(v / 1e6, 2) + 'M', pad: {l: 90, r: 10, t: 15, b: 25}});
+  LK.forEach((k, i) => counter($('lk' + i), prog(lt, 6 + i * .5, 2), k[1] || 0, k[2]));
+  for (let i = 0; i < 4; i++) show($('lg' + i), prog(lt, 3 + i * 1.6, .8), 0);
+}
+
+// ---------------------------------------------------------------- scene 11: dashboard screenshot (Ken Burns)
+if (D.shot) $('shotimg').src = D.shot;
+function drawShot(lt) {
+  const k = prog(lt, 0, 12); const el = $('shot1'); show(el, prog(lt, .3, 1), 40, .04);
+  const img = $('shotimg'); const ih = img.naturalHeight * 1700 / (img.naturalWidth || 1700);
+  const ty = -Math.max(0, ih - 720) * ease(prog(lt, 2.5, 8.5));
+  img.style.transform = `translateY(${ty}px) scale(${1 + .03 * k})`; img.style.transformOrigin = 'top center';
+}
+
+// ---------------------------------------------------------------- scene 12: terminal
+const TERM = [['$ ', 'pytest -q'], ['', '................  16 passed'], ['$ ', 'python -m pishro check'], ['', 'OK  Wallex /v1/markets · Binance · LLM claude-opus-5.5'],
+  ['$ ', 'python -m pishro fetch && python -m pishro backtest'], ['', 'report: reports/backtest.html · models/*.pkl'],
+  ['$ ', 'APP=pishro bash scripts/deploy_liara.sh'], ['', '>> deployed: https://pishro.liara.run'], ['$ ', 'python -m pishro export'], ['', 'deliverables/decisions.jsonl  trades.csv  equity.csv']];
+TERM.forEach((_, i) => cue(287 + .6 + i * .9, i % 2 ? 'tick' : 'type'));
+$('deliv').innerHTML = `<div style="font-size:26px;font-weight:700;margin-bottom:8px">تحویلی‌ها</div>` +
+  ['کد کامل در گیت‌هاب + مستند STRATEGY.md', 'لاگ تصمیم برای هر سفارش (JSONL)', 'گزارش بک‌تست HTML + مونت‌کارلو', 'تست سایه با قیمت زنده',
+   'دیپلوی یک‌دستوری روی لیارا', 'سرور MCP برای پرسیدن از ربات'].map((x, i) => `<div class="check" id="dv${i}"><div class="ic">✓</div>${x}</div>`).join('');
+function drawTerm(lt) {
+  let out = ''; TERM.forEach((l, i) => { const k = prog(lt, .6 + i * .9, .8); if (k <= 0) return;
+    const txt = l[1].slice(0, Math.ceil(l[1].length * (l[0] ? k : 1)));
+    out += (l[0] ? `<span style="color:#22c55e">${l[0]}</span>` : '') + `<span style="color:${l[0] ? '#fff' : '#8fa3c7'}">${txt}</span>\n`; });
+  $('term').innerHTML = out + (Math.floor(lt * 2) % 2 ? '█' : '');
+  for (let i = 0; i < 6; i++) show($('dv' + i), prog(lt, 1 + i * .8, .6), 0);
+}
+
+// ---------------------------------------------------------------- outro
+$('o3').innerHTML = [['بازده', pct(D.return_pct, 2)], ['افت حداکثر', fa(D.max_dd_pct, 2) + '٪'], ['معاملات', fa(D.n_trades)], ['مدل', 'Claude Opus 5.5 + LightGBM']]
+  .map((x, i) => `<div class="card" id="oc${i}" style="text-align:center;min-width:250px"><div class="label">${x[0]}</div><div style="font-size:32px;font-weight:800">${x[1]}</div></div>`).join('');
+cue(298 + .4, 'boom');
+
+// ---------------------------------------------------------------- render(t)
+window.render = function (t) {
+  drawBg(t);
+  for (const s of SCENES) {
+    const el = $(s.id); const fin = prog(t, s.a, .7), fout = 1 - prog(t, s.b - .6, .6);
+    const vis = t >= s.a - .01 && t <= s.b + .01; el.style.display = vis ? '' : 'none'; if (!vis) continue;
+    el.style.opacity = Math.min(easeOut(fin), ease(fout)); el.style.transform = `scale(${1 + (1 - easeOut(fin)) * .02})`;
+    const lt = t - s.a;
+    if (s.id === 's1') { drawLogo(lt); show($('s1t'), prog(lt, 1.5, 1.2), 40); show($('s1s'), prog(lt, 2.6, 1)); show($('s1s2'), prog(lt, 3.6, 1)); show($('s1s3'), prog(lt, 4.6, 1)); }
+    if (s.id === 's2') { for (let i = 0; i < 4; i++) show($('s2c' + i), prog(lt, 1.2 + i * 1.1, .8), 40, .1); show($('s2goal'), prog(lt, 7, 1.2)); }
+    if (s.id === 's3') { show($('s3f'), prog(lt, .8, 1)); for (let i = 0; i < 3; i++) show($('s3b' + i), prog(lt, 6 + i * 6, 1)); show($('s3c'), prog(lt, .5, 1)); drawIdea(lt); }
+    if (s.id === 's4') drawArch(lt);
+    if (s.id === 's5') drawML(lt);
+    if (s.id === 's6') drawAgent(lt);
+    if (s.id === 's7') drawRisk(lt);
+    if (s.id === 's8') drawBT(lt);
+    if (s.id === 's9') drawMC(lt);
+    if (s.id === 's10') drawLive(lt);
+    if (s.id === 's11') drawShot(lt);
+    if (s.id === 's12') drawTerm(lt);
+    if (s.id === 's13') { show($('o1'), prog(lt, .3, 1), 30); show($('o2'), prog(lt, 1, 1)); for (let i = 0; i < 4; i++) show($('oc' + i), prog(lt, 1.6 + i * .3, .7), 20); show($('o4'), prog(lt, 3, 1)); }
+  }
+  document.querySelectorAll('#chapters .c').forEach(c => { const a = +c.dataset.a, b = +c.dataset.b; const k = clamp((t - a) / (b - a));
+    c.querySelector('i').style.width = (k * 100) + '%'; c.classList.toggle('on', t >= a && t < b); });
+  $('chapters').style.opacity = t > 13 && t < 298 ? 1 : 0;
+};
+window.READY = true;
+</script>
+</body>
+</html>
