@@ -37,6 +37,7 @@ class DecisionLog:
         self.recent: deque = deque(maxlen=400)
         self._lock = threading.Lock()
         self.seq = 0
+        self.listeners: list = []       # callables(rec) — notifications, live stream
         if self.path.exists():          # keep the dashboard history across restarts
             try:
                 with open(self.path, encoding="utf-8") as f:
@@ -59,6 +60,11 @@ class DecisionLog:
         self.recent.append(rec)
         if self.store is not None:
             self.store.add_signal(kind, symbol, rec, data.get("prob"), kind, reason_fa)
+        for fn in list(self.listeners):
+            try:
+                fn(rec)
+            except Exception:  # noqa: BLE001 - a listener must never break logging
+                pass
         return rec
 
     def tail(self, n: int = 100, kinds: set[str] | None = None) -> list[dict]:
