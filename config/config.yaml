@@ -56,14 +56,19 @@ strategy:                      # بازگشت پریمیوم (Premium Reversion)
   resting_markets: 4           # چند بازار سفارش خرید منتظر (میکر) داشته باشند
   sniper_enabled: true         # بقیه‌ی بازارها: خرید فوری وقتی قیمت فروش زیر سطح آمد
   requote_bps: 5
-  requote_max_age_sec: 45
+  requote_max_age_sec: 45      # (قدیمی؛ سفارش دیگر فقط به‌خاطر سن جابه‌جا نمی‌شود)
+  min_rest_sec: 90             # هیسترزیس: سفارش منتظر حداقل ۹۰ ثانیه می‌ماند
+  replace_score_ratio: 1.25    # فقط فرصتی با امتیاز ≥ ۱.۲۵× جای سفارش منتظر را می‌گیرد
   shock_ref_drop: 0.005        # افت ۰.۵٪ بایننس در ۵ دقیقه = توقف ورود
   shock_usdt_jump: 0.003       # جهش ۰.۳٪ تتر در ۵ دقیقه = توقف ورود
   regime_std_ratio_max: 2.2    # نوسان پریمیوم ۶ ساعت اخیر نسبت به بلندمدت
   position_frac: 0.20          # اندازه‌ی پایه‌ی هر پوزیشن (قبل از تعدیل ML و ایجنت)
 
 ml:
-  enabled: true
+  # خاموش: روی ۱۴ روز داده‌ی واقعی AUC تست ۰.۵۰ تا ۰.۵۲ بود و ablation بازده را کم کرد (۷.۸٪ → ۶.۵٪).
+  # فقط اگر tune روی ۳۰ روز AUC ≥ min_auc و بهبود خارج از نمونه نشان دهد روشن می‌شود.
+  enabled: false
+  min_auc: 0.55
   model_path: models/reversion.pkl
   min_prob: 0.55
   # اندازه بر اساس اطمینان مدل: p=min_prob → 50٪، p=full_size_prob → 100٪

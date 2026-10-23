@@ -30,6 +30,12 @@ from .types import Position, TradeResult
 log = logging.getLogger(__name__)
 
 
+
+def model_usable(m, cfg) -> bool:
+    """A model gates and sizes orders only if its held-out AUC clears ``ml.min_auc``."""
+    auc = getattr(getattr(m, "report", None), "auc", float("nan"))
+    return auc == auc and auc >= float(cfg.get("ml.min_auc", 0.55))
+
 class Bot:
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -66,6 +72,7 @@ class Bot:
         self.engine = ReversionEngine(cfg, self.market, self.broker, self.risk, self.portfolio, self.dlog,
                                       self.current_policy, self.current_model, self._on_trade_closed)
         self.notifier = Notifier(cfg.secrets.bale_bot_token, cfg.secrets.bale_chat_id)
+        self.dlog.listeners.append(self._notify_decision)
         self.agent = self.narrator = self.llm = None
         self.news = None
         if cfg.ai_enabled:
@@ -94,8 +101,10 @@ class Bot:
     def current_model(self) -> ProbModel | None:
         maker, taker = self.broker.fee_override or self.broker.fallback
         prefer = "zero" if (maker == 0 and taker == 0) else "fee"
+        if not self.cfg.get("ml.enabled", True):
+            return None
         m = self.models.get(prefer) or self.models.get("fee" if prefer == "zero" else "zero")
-        return m if m is not None and m.ready else None
+        return m if m is not None and m.ready and model_usable(m, self.cfg) else None
 
     # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
@@ -183,6 +192,19 @@ class Bot:
         tmn = bals.get("TMN", (0.0, 0.0))
         acc.equity, acc.exposure, acc.by_base, acc.balances = equity, exposure, by_base, bals
         acc.free_tmn = max(0.0, tmn[0] - tmn[1])
+
+    NOTIFY_KINDS = {"buy_fill": "🟢 خرید پر شد", "order_rejected": "⚠️ سفارش رد شد", "fee_regime": "ℹ️ کارمزد",
+                    "agent_error": "⚠️ خطای ایجنت", "adopt": "ℹ️ دارایی بی‌صاحب", "dust": "ℹ️ خرده‌کوین"}
+
+    def _notify_decision(self, rec: dict) -> None:
+        title = self.NOTIFY_KINDS.get(rec.get("kind", ""))
+        if not title or not self.notifier.targets:
+            return
+        try:
+            asyncio.get_running_loop().create_task(self.notifier.send(
+                f"{title} [{self.mode}] {rec.get('symbol', '')}\n{str(rec.get('reason', ''))[:500]}"))
+        except RuntimeError:
+            pass
 
     def _on_trade_closed(self, t: TradeResult) -> None:
         self.trade_seq += 1
@@ -382,7 +404,10 @@ class Bot:
 
     def opportunities(self, limit: int = 15) -> list[dict]:
         rows = sorted(self.engine.candidates, key=lambda c: -c.get("score", 0))[:limit]
+        ml = "on" if self.current_model() is not None else "off"
         return [{"symbol": c["symbol"], "edge_pct": round(c["edge"] * 100, 3), "prob": c.get("prob"),
+                 "ml_prob": round(c["prob"], 3) if c.get("prob") is not None else
+                 ("ML خاموش (مدل قدرت پیش‌بینی کافی ندارد)" if ml == "off" else "محاسبه نشده"),
                  "dev_now_pct": round(c["dev_now"] * 100, 3), "premium_std_pct": round(c["std"] * 100, 3),
                  "revert_rate": round(c["revert_rate"], 3), "baseline_pct": round(c["baseline"] * 100, 3),
                  "level": c["level"], "ask": c["ask"], "resting": c["symbol"] in self.engine.entries} for c in rows]

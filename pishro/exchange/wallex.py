@@ -140,7 +140,8 @@ def parse_order(r: dict, fallback: Order | None = None) -> Order:
     if o.filled_qty > 0:
         o.avg_price = exec_sum / o.filled_qty if exec_sum > 0 else _f(r.get("executedPrice"), o.price)
     fills = r.get("fills")
-    if isinstance(fills, list) and fills:
+    # only fills that actually carry a "fee" field count as a fee report (a missing field is not "zero fee")
+    if isinstance(fills, list) and any(isinstance(x, dict) and x.get("fee") not in (None, "") for x in fills):
         quote = o.symbol[-4:] if o.symbol.endswith("USDT") else o.symbol[-3:]
         o.fee_quote = sum(_f(x.get("fee")) for x in fills if (x.get("feeAsset") or "").upper() == quote)
         o.fee_base = sum(_f(x.get("fee")) for x in fills if (x.get("feeAsset") or "").upper() not in (quote, ""))
