@@ -42,12 +42,13 @@ class BinanceRef:
     async def close(self) -> None:
         await self._client.aclose()
 
-    async def _get(self, path: str, params: dict | None = None) -> httpx.Response:
+    async def _get(self, path: str, params: dict | None = None, timeout: float | None = None) -> httpx.Response:
         """GET on the current REST base; on a network error or non-200 move to the next base."""
         err: Exception | None = None
         for _ in range(len(self.rests)):
             try:
-                r = await self._client.get(f"{self.rest}{path}", params=params)
+                r = await self._client.get(f"{self.rest}{path}", params=params,
+                                           **({"timeout": timeout} if timeout else {}))
                 if r.status_code == 200:
                     return r
                 err = httpx.HTTPStatusError(f"{r.status_code} from {self.rest}{path}", request=r.request, response=r)
@@ -61,7 +62,17 @@ class BinanceRef:
         raise err  # type: ignore[misc]
 
     async def load_symbols(self) -> set[str]:
-        r = await self._get("/api/v3/exchangeInfo")
+        # MEXC's full exchangeInfo is ~2 MB: allow time and retry instead of failing the warm-up
+        r = None
+        for attempt in range(3):
+            try:
+                r = await self._get("/api/v3/exchangeInfo", timeout=40)
+                break
+            except httpx.HTTPError as e:
+                log.warning("exchangeInfo attempt %d failed: %r", attempt + 1, e)
+                await asyncio.sleep(2)
+        if r is None:
+            raise httpx.HTTPError("exchangeInfo unavailable after 3 attempts")
         out = set()
         for s in r.json().get("symbols", []):
             # Binance: status TRADING; MEXC: status "1"

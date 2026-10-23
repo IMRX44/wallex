@@ -120,7 +120,7 @@ class LiveMarket:
         try:
             await self.binance.load_symbols()
         except Exception as e:  # noqa: BLE001
-            log.warning("binance symbols: %s", e)
+            log.warning("binance symbols: %r", e)
         end = int(time.time()) // 60 * 60 - 60
         start = end - int(days * 86400)
         sem = asyncio.Semaphore(4)
