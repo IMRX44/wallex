@@ -12,3 +12,4 @@ video/build/
 *.mp4
 *.zip
 *.log
+data_zero/
