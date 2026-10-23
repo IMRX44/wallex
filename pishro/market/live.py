@@ -155,6 +155,18 @@ class LiveMarket:
                                    *[kl(b) for b in bases])
         wx = {r[0]: r[1] for r in res if r[0] in self.infos or r[0] == USDT_TMN}
         refs = {r[0]: r[1] for r in res if r[0] in bases}
+        grid_n = max(1, (end - start) // 60)
+        for b, ser in list(refs.items()):
+            # a global history with holes (blocked pages) would bias the baseline: prefer Wallex <COIN>USDT
+            cov = ser.dropna().shape[0] / grid_n
+            if cov < 0.8:
+                log.warning("warm-up: %s reference history covers only %.0f%%", b, cov * 100)
+                refs.pop(b)
+                cs = f"{b}USDT"
+                if cs in self.infos and cs not in cross:
+                    cross.append(cs)
+                    _, df = await udf(cs)
+                    wx[cs] = df
         for cs in cross:
             df = wx.get(cs)
             if df is not None and not df.empty:
@@ -180,7 +192,7 @@ class LiveMarket:
             o = w["o"].to_numpy(float)
             h = w["h"].to_numpy(float)
             lo = w["l"].to_numpy(float)
-            r = ref.reindex(grid).ffill().to_numpy(float)
+            r = ref.reindex(grid).ffill(limit=3).to_numpy(float)   # never carry a stale reference across a gap
             fair = r * uc
             st = self.states.setdefault(sym, PremiumState(sym, self.params))
             hist = self.history.setdefault(sym, deque(maxlen=HIST_KEEP))

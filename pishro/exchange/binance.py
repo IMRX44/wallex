@@ -32,6 +32,7 @@ class BinanceRef:
                  timeout: float = 8.0, fallback_rest: list[str] | None = None):
         self.rests = [u.rstrip("/") for u in [rest, *(fallback_rest or [])] if u]
         self.rest = self.rests[0]
+        self._dead: dict[str, float] = {}     # base url -> until (legal block 451/403: do not retry for a while)
         self.ws = ws.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout, headers={"User-Agent": "pishro-bot/1.0"})
         self.mids: dict[str, float] = {}      # BASE -> USDT mid
@@ -54,7 +55,12 @@ class BinanceRef:
                 err = httpx.HTTPStatusError(f"{r.status_code} from {self.rest}{path}", request=r.request, response=r)
             except httpx.HTTPError as e:
                 err = e
+            if isinstance(err, httpx.HTTPStatusError) and err.response.status_code in (451, 403)                     and self.rest == self.rests[0] and len(self.rests) > 1:
+                self._dead[self.rest] = time.time() + 1800
             if len(self.rests) == 1:
+                break
+            alive = [u for u in self.rests if self._dead.get(u, 0) < time.time()]
+            if alive == [self.rest]:      # the only live venue failed transiently: no point switching
                 break
             i = (self.rests.index(self.rest) + 1) % len(self.rests)
             log.warning("reference %s failed (%r); switching to %s", self.rest, err, self.rests[i])
@@ -98,12 +104,19 @@ class BinanceRef:
 
     async def klines(self, base: str, interval: str, start_ms: int, end_ms: int) -> list[list]:
         out, s = [], start_ms
+        page_ms = 500 * 60_000            # smallest page among the venues (MEXC)
         while s < end_ms:
-            try:
-                r = await self._get("/api/v3/klines", params={
-                    "symbol": f"{base}USDT", "interval": interval, "startTime": s, "endTime": end_ms, "limit": 1000})
-            except httpx.HTTPError:
-                break
+            r = None
+            for attempt in range(3):      # MEXC answers 451 intermittently to datacenter IPs (Liara)
+                try:
+                    r = await self._get("/api/v3/klines", params={
+                        "symbol": f"{base}USDT", "interval": interval, "startTime": s, "endTime": end_ms, "limit": 1000})
+                    break
+                except httpx.HTTPError:
+                    await asyncio.sleep(1.0 + 2 * attempt)
+            if r is None:                 # give up on this page only; the gap stays a gap (never forward-filled)
+                s += page_ms
+                continue
             k = r.json()
             if not isinstance(k, list) or not k:
                 break

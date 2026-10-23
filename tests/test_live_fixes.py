@@ -151,3 +151,40 @@ def test_trading_capital_cap_reserves_the_rest(tmp_path):
     bot2 = Bot.__new__(Bot)
     bot2.cfg, bot2.store, bot2._cap_state, bot2.capital, bot2.risk, bot2.dlog = bot.cfg, store, None, 0, bot.risk, bot.dlog
     assert bot2._capital_reserve(5_100_000) == 30_000
+
+
+def test_klines_skip_blocked_page_and_never_thrash():
+    """On Liara MEXC answered 451 to some kline pages: the history got truncated and then forward-filled."""
+    start = 1_700_000_000_000
+    calls = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.host == "blocked.example":
+            return httpx.Response(451)
+        s = int(req.url.params["startTime"])
+        e = int(req.url.params["endTime"])
+        calls["n"] += 1
+        if start + 500 * 60_000 <= s < start + 1000 * 60_000:      # the second page is always blocked
+            return httpx.Response(451)
+        return httpx.Response(200, json=[[t, "1", "1", "1", "1", "1"] for t in range(s, min(e, s + 500 * 60_000), 60_000)])
+
+    async def run():
+        bn = BinanceRef("https://blocked.example", fallback_rest=["https://mexc.example"])
+        bn._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        import pishro.exchange.binance as m
+        orig = m.asyncio.sleep
+
+        async def fast(_):
+            return None
+        m.asyncio.sleep = fast
+        try:
+            k = await bn.klines("BTC", "1m", start, start + 1500 * 60_000)
+        finally:
+            m.asyncio.sleep = orig
+            await bn.close()
+        return k, bn.rest
+
+    k, rest = asyncio.run(run())
+    ts = [x[0] for x in k]
+    assert len(k) == 1000 and ts[0] == start and ts[-1] == start + 1499 * 60_000   # pages 1 and 3 kept, gap stays
+    assert rest == "https://mexc.example"
