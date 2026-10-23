@@ -41,7 +41,8 @@ class Bot:
         self.store = Store(data / ("pishro.db" if self.live else "pishro_paper.db"))
         self.client = WallexClient(cfg.get("exchange.base_url"), cfg.secrets.wallex_api_key,
                                    float(cfg.get("exchange.request_timeout_sec", 10)))
-        self.binance = BinanceRef(cfg.get("references.binance_rest"), cfg.get("references.binance_ws"))
+        self.binance = BinanceRef(cfg.get("references.binance_rest"), cfg.get("references.binance_ws"),
+                                  fallback_rest=cfg.get("references.binance_rest_fallbacks", []))
         self.nobitex = NobitexClient(cfg.get("references.nobitex_base_url")) if cfg.get("references.nobitex") else None
         self.stream = WallexStream(cfg.get("exchange.ws_url")) if cfg.get("exchange.ws_enabled", True) else None
         self.market = LiveMarket(cfg, self.client, self.binance, self.store, self.nobitex, self.stream)

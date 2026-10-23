@@ -1,7 +1,9 @@
 """Binance spot prices as the *global leader* reference.
 
-``api.binance.com`` is geo-blocked from Iran, but the public market-data mirrors
-``data-api.binance.vision`` (REST) and ``data-stream.binance.vision`` (WebSocket) answer.
+``api.binance.com`` is geo-blocked from Iran, and in practice the public mirror
+``data-api.binance.vision`` answers 451 from Iranian IPs too. ``fallback_rest`` lists
+Binance-compatible REST APIs (MEXC: same /api/v3 paths and payloads) tried in order when
+the current one fails; the first that answers is kept.
 One REST call returns best bid/ask for every symbol, so the whole reference set is
 refreshed in a single request; the optional WebSocket pushes sub-second updates.
 """
@@ -27,8 +29,9 @@ def _f(v) -> float:
 
 class BinanceRef:
     def __init__(self, rest: str = "https://data-api.binance.vision", ws: str = "wss://data-stream.binance.vision",
-                 timeout: float = 8.0):
-        self.rest = rest.rstrip("/")
+                 timeout: float = 8.0, fallback_rest: list[str] | None = None):
+        self.rests = [u.rstrip("/") for u in [rest, *(fallback_rest or [])] if u]
+        self.rest = self.rests[0]
         self.ws = ws.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout, headers={"User-Agent": "pishro-bot/1.0"})
         self.mids: dict[str, float] = {}      # BASE -> USDT mid
@@ -39,19 +42,36 @@ class BinanceRef:
     async def close(self) -> None:
         await self._client.aclose()
 
+    async def _get(self, path: str, params: dict | None = None) -> httpx.Response:
+        """GET on the current REST base; on a network error or non-200 move to the next base."""
+        err: Exception | None = None
+        for _ in range(len(self.rests)):
+            try:
+                r = await self._client.get(f"{self.rest}{path}", params=params)
+                if r.status_code == 200:
+                    return r
+                err = httpx.HTTPStatusError(f"{r.status_code} from {self.rest}{path}", request=r.request, response=r)
+            except httpx.HTTPError as e:
+                err = e
+            if len(self.rests) == 1:
+                break
+            i = (self.rests.index(self.rest) + 1) % len(self.rests)
+            log.warning("reference %s failed (%r); switching to %s", self.rest, err, self.rests[i])
+            self.rest = self.rests[i]
+        raise err  # type: ignore[misc]
+
     async def load_symbols(self) -> set[str]:
-        r = await self._client.get(f"{self.rest}/api/v3/exchangeInfo", params={"permissions": "SPOT"})
-        r.raise_for_status()
+        r = await self._get("/api/v3/exchangeInfo")
         out = set()
         for s in r.json().get("symbols", []):
-            if s.get("quoteAsset") == "USDT" and s.get("status") == "TRADING":
+            # Binance: status TRADING; MEXC: status "1"
+            if s.get("quoteAsset") == "USDT" and s.get("status") in ("TRADING", "1", 1, "ENABLED"):
                 out.add(s["baseAsset"].upper())
         self.symbols = out
         return out
 
     async def poll(self) -> dict[str, float]:
-        r = await self._client.get(f"{self.rest}/api/v3/ticker/bookTicker")
-        r.raise_for_status()
+        r = await self._get("/api/v3/ticker/bookTicker")
         now = time.time()
         for row in r.json():
             sym = row.get("symbol", "")
@@ -68,17 +88,19 @@ class BinanceRef:
     async def klines(self, base: str, interval: str, start_ms: int, end_ms: int) -> list[list]:
         out, s = [], start_ms
         while s < end_ms:
-            r = await self._client.get(f"{self.rest}/api/v3/klines", params={
-                "symbol": f"{base}USDT", "interval": interval, "startTime": s, "endTime": end_ms, "limit": 1000})
-            if r.status_code != 200:
+            try:
+                r = await self._get("/api/v3/klines", params={
+                    "symbol": f"{base}USDT", "interval": interval, "startTime": s, "endTime": end_ms, "limit": 1000})
+            except httpx.HTTPError:
                 break
             k = r.json()
-            if not k:
+            if not isinstance(k, list) or not k:
                 break
             out.extend(k)
-            s = k[-1][0] + 60_000
-            if len(k) < 1000:
+            nxt = int(k[-1][0]) + 60_000
+            if nxt <= s:   # page sizes differ (Binance 1000, MEXC 500): stop only when no progress
                 break
+            s = nxt
         return out
 
     async def stream(self, bases: list[str], stop: asyncio.Event, on_update: Callable[[str], None] | None = None) -> None:

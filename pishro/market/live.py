@@ -148,9 +148,17 @@ class LiveMarket:
 
         syms = sorted(self.universe.tradable)
         bases = sorted({self.infos[s].base for s in syms if self.infos[s].base in self.binance.symbols})
-        res = await asyncio.gather(udf(USDT_TMN), *[udf(s) for s in syms], *[kl(b) for b in bases])
+        # coins without a global market (e.g. USOON, XAUT): Wallex <COIN>USDT is the reference, as in compute_fair
+        cross = sorted({f"{self.infos[s].base}USDT" for s in syms if self.infos[s].base not in self.binance.symbols
+                        and f"{self.infos[s].base}USDT" in self.infos})
+        res = await asyncio.gather(udf(USDT_TMN), *[udf(s) for s in syms], *[udf(s) for s in cross],
+                                   *[kl(b) for b in bases])
         wx = {r[0]: r[1] for r in res if r[0] in self.infos or r[0] == USDT_TMN}
         refs = {r[0]: r[1] for r in res if r[0] in bases}
+        for cs in cross:
+            df = wx.get(cs)
+            if df is not None and not df.empty:
+                refs[self.infos[cs].base] = df["c"].astype(float)
         grid = pd.Index(range(start - start % 60, end + 1, 60))
         usdt = wx.get(USDT_TMN)
         if usdt is None or usdt.empty:

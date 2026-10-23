@@ -58,7 +58,7 @@ async def fetch_history(cfg, days: float | None = None, max_markets: int | None 
     max_markets = int(max_markets or cfg.get("backtest.max_markets", 40))
     out = history_dir(cfg)
     client = WallexClient(cfg.get("exchange.base_url"))
-    bn = BinanceRef(cfg.get("references.binance_rest"))
+    bn = BinanceRef(cfg.get("references.binance_rest"), fallback_rest=cfg.get("references.binance_rest_fallbacks", []))
     try:
         infos, quotes = await client.markets()
         (out / "markets.json").write_text(json.dumps(

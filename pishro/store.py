@@ -29,6 +29,14 @@ CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 """
 
 
+
+def _json_default(v):
+    """numpy scalars -> float; anything else (datetime, Path, ...) -> str."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return str(v)
+
 class Store:
     def __init__(self, path: str | Path):
         self.path = str(path)
@@ -57,7 +65,7 @@ class Store:
 
     def add_signal(self, engine: str, symbol: str, features: dict, prob: float | None, decision: str, reason: str) -> None:
         self._exec("INSERT INTO signals (ts,engine,symbol,features,prob,decision,reason) VALUES (?,?,?,?,?,?,?)",
-                   (time.time(), engine, symbol, json.dumps(features, ensure_ascii=False, default=float),
+                   (time.time(), engine, symbol, json.dumps(features, ensure_ascii=False, default=_json_default),
                     prob, decision, reason))
 
     def upsert_order(self, o: Order) -> None:
@@ -69,7 +77,7 @@ class Store:
         self._exec("INSERT INTO trades (engine,symbol,entry_ts,exit_ts,entry_price,exit_price,qty,pnl_tmn,ret,"
                    "reason_in,reason_out,meta) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                    (t.engine, t.symbol, t.entry_ts, t.exit_ts, t.entry_price, t.exit_price, t.qty, t.pnl_tmn,
-                    t.ret, t.reason_in, t.reason_out, json.dumps(t.meta, ensure_ascii=False, default=float)))
+                    t.ret, t.reason_in, t.reason_out, json.dumps(t.meta, ensure_ascii=False, default=_json_default)))
 
     def add_equity(self, equity: float, cash_tmn: float, usdt: float, exposure: float, drawdown: float) -> None:
         self._exec("INSERT INTO equity VALUES (?,?,?,?,?,?)", (time.time(), equity, cash_tmn, usdt, exposure, drawdown))
@@ -83,7 +91,7 @@ class Store:
         self._exec("INSERT INTO events VALUES (?,?,?)", (time.time(), level, msg))
 
     def save_position(self, p: Position) -> None:
-        self._exec("INSERT OR REPLACE INTO positions VALUES (?,?)", (p.id, json.dumps(p.to_dict(), default=float)))
+        self._exec("INSERT OR REPLACE INTO positions VALUES (?,?)", (p.id, json.dumps(p.to_dict(), default=_json_default)))
 
     def delete_position(self, pid: str) -> None:
         self._exec("DELETE FROM positions WHERE id=?", (pid,))

@@ -37,7 +37,7 @@ async def _check(cfg) -> int:
 
     ok = True
     wx = WallexClient(cfg.get("exchange.base_url"), cfg.secrets.wallex_api_key)
-    bn = BinanceRef(cfg.get("references.binance_rest"))
+    bn = BinanceRef(cfg.get("references.binance_rest"), fallback_rest=cfg.get("references.binance_rest_fallbacks", []))
     nb = NobitexClient(cfg.get("references.nobitex_base_url"))
 
     def line(name, good, detail=""):

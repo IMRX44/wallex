@@ -11,3 +11,4 @@ video/build/
 .ruff_cache/
 *.mp4
 *.zip
+*.log

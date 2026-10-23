@@ -24,8 +24,10 @@ exchange:
 
 references:
   binance_rest: https://data-api.binance.vision
+  # از IP ایران binance.vision هم 451 می‌دهد؛ MEXC همان API سازگار با بایننس را دارد و باز است
+  binance_rest_fallbacks: [https://api.mexc.com]
   binance_ws: wss://data-stream.binance.vision
-  binance_ws_enabled: true
+  binance_ws_enabled: false    # وب‌سوکت بایننس از ایران بسته است؛ REST هر ۲ ثانیه کافی است
   nobitex: true
   nobitex_base_url: https://apiv2.nobitex.ir
   nobitex_interval_sec: 10
