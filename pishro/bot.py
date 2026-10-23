@@ -80,7 +80,8 @@ class Bot:
             from .ai.llm import LLMClient
             from .ai.news import NewsReader
             self.llm = LLMClient(cfg.secrets.llm_base_url, cfg.secrets.llm_api_key, cfg.get("ai.model"),
-                                 float(cfg.get("ai.request_timeout_sec", 120)), int(cfg.get("ai.max_output_tokens", 2000)))
+                                 float(cfg.get("ai.request_timeout_sec", 120)), int(cfg.get("ai.max_output_tokens", 2000)),
+                                 fallback_model=cfg.get("ai.fallback_model", ""))
             self.agent = TradingAgent(cfg, self.llm, self)
             self.narrator = TradeNarrator(self.llm, self.dlog) if cfg.get("ai.narrate_trades", True) else None
             self.news = NewsReader(cfg.get("ai.news_feeds", []) or [], float(cfg.get("ai.news_max_age_hours", 12)))
@@ -378,12 +379,12 @@ class Bot:
                    outlook: str = "") -> None:
         self.policy = policy
         self.store.set_kv("policy", policy.to_dict())
-        self.store.add_decision("agent_review", self.cfg.get("ai.model"), {"trigger": trigger, "transcript": transcript},
+        self.store.add_decision("agent_review", (self.llm.model if self.llm else self.cfg.get("ai.model")), {"trigger": trigger, "transcript": transcript},
                                 {"policy": policy.to_dict(), "actions": actions}, policy.rationale, True)
         self.dlog.log("agent_policy", "", policy.rationale or "ایجنت سیاست معاملاتی را به‌روز کرد",
                       trigger=trigger, mode=policy.mode, size_mult=policy.size_mult, edge_mult=policy.edge_mult,
                       exit_edge=policy.exit_edge, markets={k: v.__dict__ for k, v in policy.markets.items()},
-                      actions=actions, outlook=outlook, latency_sec=round(latency, 1), model=self.cfg.get("ai.model"))
+                      actions=actions, outlook=outlook, latency_sec=round(latency, 1), model=(self.llm.model if self.llm else self.cfg.get("ai.model")))
 
     async def control(self, action: str) -> dict:
         if action == "pause":

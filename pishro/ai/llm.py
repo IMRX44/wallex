@@ -11,17 +11,39 @@ log = logging.getLogger(__name__)
 
 
 class LLMClient:
-    def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 120, max_tokens: int = 2000):
+    def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 120, max_tokens: int = 2000,
+                 fallback_model: str = "", fallback_minutes: float = 30):
         from openai import AsyncOpenAI
         self.client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=timeout, max_retries=2)
-        self.model = model
+        self.primary = model
+        self.fallback_model = fallback_model
+        self.fallback_sec = 60 * fallback_minutes
+        self._fallback_until = 0.0
         self.max_tokens = max_tokens
         self.calls = 0
         self.failures = 0
         self.last_latency = 0.0
         self.tools_supported = True
 
+    @property
+    def model(self) -> str:
+        """The model in use: the fallback while the primary is refused for billing reasons."""
+        return self.fallback_model if self.fallback_model and time.time() < self._fallback_until else self.primary
+
     async def chat(self, messages: list[dict], tools: list[dict] | None = None, temperature: float = 0.2) -> Any:
+        try:
+            return await self._chat(messages, tools, temperature)
+        except Exception as e:  # noqa: BLE001
+            # Liara answers 402 when the account balance is below the minimum for an expensive model
+            msg = str(e).lower()
+            if self.fallback_model and self.model != self.fallback_model and ("402" in msg or "balance" in msg):
+                log.warning("LLM %s refused (balance); using %s for %.0f min", self.primary, self.fallback_model,
+                            self.fallback_sec / 60)
+                self._fallback_until = time.time() + self.fallback_sec
+                return await self._chat(messages, tools, temperature)
+            raise
+
+    async def _chat(self, messages: list[dict], tools: list[dict] | None = None, temperature: float = 0.2) -> Any:
         t0 = time.time()
         kw: dict[str, Any] = {"model": self.model, "messages": messages, "max_tokens": self.max_tokens,
                               "temperature": temperature}

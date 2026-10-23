@@ -96,6 +96,7 @@ risk:
 ai:
   enabled: true
   model: anthropic/claude-opus-5.5
+  fallback_model: anthropic/claude-sonnet-5   # اگر لیارا به‌خاطر موجودی کم Opus را رد کند (خطای 402)
   agent_interval_minutes: 20
   agent_max_steps: 8
   policy_ttl_minutes: 90        # اگر ایجنت جواب ندهد، سیاست به حالت محافظه‌کار برمی‌گردد

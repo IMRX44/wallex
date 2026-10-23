@@ -191,3 +191,22 @@ def test_klines_skip_blocked_page_and_never_thrash():
     assert len(k) == 1000 and ts[0] == start and ts[-1] == start + 1499 * 60_000   # pages 1 and 3 kept, gap stays
     assert rest == "https://mexc.example"
 
+
+
+def test_llm_falls_back_when_balance_refused():
+    """Live 18:32: Liara refused Opus with 402 (balance below the model's minimum)."""
+    from pishro.ai.llm import LLMClient
+
+    llm = LLMClient("http://x", "k", "anthropic/claude-opus-5.5", fallback_model="anthropic/claude-sonnet-5")
+    used = []
+
+    async def fake(messages, tools=None, temperature=0.2):
+        used.append(llm.model)
+        if llm.model.endswith("opus-5.5"):
+            raise RuntimeError("Error code: 402 - Your balance must be higher than 871968 tomans")
+        return SimpleNamespace(content="ok")
+
+    llm._chat = fake
+    assert asyncio.run(llm.chat([{"role": "user", "content": "hi"}])).content == "ok"
+    assert used == ["anthropic/claude-opus-5.5", "anthropic/claude-sonnet-5"]
+    assert llm.model == "anthropic/claude-sonnet-5"      # stays on the fallback for a while
