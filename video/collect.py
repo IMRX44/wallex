@@ -127,7 +127,9 @@ def collect(data_dir: Path, demo: bool, capital: float = 5_000_000, live_db: str
                                          for a in (outp.get("actions") or [])]})
 
     # ---------------- backtest + ML
-    rep = data_dir / "reports" / "backtest.json"
+    rep_dir = next((d for d in (data_dir / "reports", data_dir.parent / "reports", ROOT / "reports")
+                    if (d / "backtest.json").exists()), data_dir / "reports")
+    rep = rep_dir / "backtest.json"
     if rep.exists():
         bt = json.loads(rep.read_text())
         out["backtest_meta"] = bt.get("meta", {}).get("subtitle", "")
@@ -140,9 +142,9 @@ def collect(data_dir: Path, demo: bool, capital: float = 5_000_000, live_db: str
                    "importance": list(((r.get("model") or {}).get("feature_importance") or {}).items())[:8],
                    "curves": {k: [[t, v] for t, v in (r.get("curves") or {}).get(k, [])] for k in ("rules_test", "ml_test")}}
             fee_tag = f"fee{r['maker']}"
-            tpath = data_dir / "reports" / f"trades_ml_test_{fee_tag}.csv"
+            tpath = rep_dir / f"trades_ml_test_{fee_tag}.csv"
             if not tpath.exists():
-                tpath = data_dir / "reports" / f"trades_rules_test_{fee_tag}.csv"
+                tpath = rep_dir / f"trades_rules_test_{fee_tag}.csv"
             row["mc_hist"] = _mc_hist(tpath, capital, r["ml_test"].get("days") or r["rules_test"].get("days") or 1)
             out["backtest"].append(row)
     return out

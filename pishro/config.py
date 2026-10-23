@@ -105,7 +105,22 @@ ENV_OVERRIDES = {
 }
 
 
+def load_dotenv(path: Path = ROOT / ".env") -> None:
+    """Read KEY=VALUE lines from .env into the environment (real environment variables win)."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        val = val.split(" #", 1)[0].strip().strip('"').strip("'")
+        if key.strip() and val:
+            os.environ.setdefault(key.strip(), val)
+
+
 def load_config(path: str | os.PathLike | None = None, overrides: dict | None = None) -> Config:
+    load_dotenv()
     path = Path(path or os.environ.get("PISHRO_CONFIG", DEFAULT_CONFIG))
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
