@@ -125,3 +125,29 @@ def test_live_start_cancels_only_own_stale_orders(tmp_path):
     bot.dlog = SimpleNamespace(log=lambda kind, *a, **k: logged.append(kind))
     asyncio.run(bot._cancel_stale_orders())
     assert bot.client.cancelled == ["PRREVABC"] and logged == ["stale_order_cancel"]
+
+
+def test_trading_capital_cap_reserves_the_rest(tmp_path):
+    """First live test runs on 1M of the 5M account; limits apply to the 1M."""
+    from pishro.bot import Bot
+
+    store = Store(tmp_path / "c.db")
+    cfgd = {"trading_capital_tmn": 1_000_000}
+    bot = Bot.__new__(Bot)
+    bot.cfg = SimpleNamespace(get=lambda k, d=None: cfgd.get(k, d))
+    bot.store, bot._cap_state, bot.capital = store, None, 5e6
+    bot.risk = SimpleNamespace(peak=5e6, day_start=5e6)
+    logged = []
+    bot.dlog = SimpleNamespace(log=lambda kind, *a, **k: logged.append(kind))
+    assert bot._capital_reserve(5_000_000) == 4_000_000
+    assert bot.risk.peak == 1_000_000 and bot.risk.day_start == 1_000_000 and bot.capital == 1_000_000
+    # trading P&L does not move the reserve
+    assert bot._capital_reserve(5_030_000) == 4_000_000
+    # raising the cap later shrinks the reserve and restarts the high-water mark
+    cfgd["trading_capital_tmn"] = 5_000_000
+    assert bot._capital_reserve(5_030_000) == 30_000
+    assert bot.risk.peak == 5_000_000 and logged == ["capital_cap", "capital_cap"]
+    # persisted across restarts
+    bot2 = Bot.__new__(Bot)
+    bot2.cfg, bot2.store, bot2._cap_state, bot2.capital, bot2.risk, bot2.dlog = bot.cfg, store, None, 0, bot.risk, bot.dlog
+    assert bot2._capital_reserve(5_100_000) == 30_000

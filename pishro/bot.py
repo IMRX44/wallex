@@ -88,6 +88,7 @@ class Bot:
         self.started = time.time()
         self.equity_curve: deque = deque(maxlen=20000)
         self.capital = float(cfg.get("initial_capital_tmn", 5e6))
+        self._cap_state: dict | None = None
         self.trade_seq = 0
         self.agent_triggers: list[str] = []
         self.status_text = "starting"
@@ -191,8 +192,33 @@ class Bot:
                 exposure += v
                 by_base[asset] = v
         tmn = bals.get("TMN", (0.0, 0.0))
-        acc.equity, acc.exposure, acc.by_base, acc.balances = equity, exposure, by_base, bals
-        acc.free_tmn = max(0.0, tmn[0] - tmn[1])
+        reserve = self._capital_reserve(equity)
+        acc.real_equity = equity
+        acc.equity, acc.exposure, acc.by_base, acc.balances = equity - reserve, exposure, by_base, bals
+        acc.free_tmn = max(0.0, tmn[0] - tmn[1] - reserve)
+
+    def _capital_reserve(self, real_equity: float) -> float:
+        """``trading_capital_tmn`` caps what the bot may use (e.g. 1M of the 5M account for a first live
+        test). TMN above it is an untouchable reserve: sizing, exposure caps and the drawdown / daily-loss
+        limits all see only the trading capital, so the limits get stricter in toman terms. When the cap
+        changes, the reserve is recomputed and the risk high-water mark restarts from the new base."""
+        cap = float(self.cfg.get("trading_capital_tmn", 0) or 0)
+        st = self._cap_state
+        if st is None:
+            st = self._cap_state = self.store.get_kv("capital_cap") or {}
+        if not cap:
+            return 0.0
+        if st.get("cap") != cap or "reserve" not in st:
+            st = self._cap_state = {"cap": cap, "reserve": max(0.0, real_equity - cap), "ts": time.time()}
+            self.store.set_kv("capital_cap", st)
+            self.capital = cap
+            self.risk.peak = real_equity - st["reserve"]
+            self.risk.day_start = real_equity - st["reserve"]
+            self.dlog.log("capital_cap", "", f"سقف سرمایه‌ی قابل‌معامله {cap:,.0f} تومان؛ "
+                          f"{st['reserve']:,.0f} تومان ذخیره‌ی دست‌نخورده می‌ماند و حدود ریسک روی همین سقف حساب می‌شوند",
+                          cap=cap, reserve=st["reserve"], real_equity=real_equity)
+        self.capital = cap
+        return float(st["reserve"])
 
     NOTIFY_KINDS = {"buy_fill": "🟢 خرید پر شد", "order_rejected": "⚠️ سفارش رد شد", "fee_regime": "ℹ️ کارمزد",
                     "agent_error": "⚠️ خطای ایجنت", "adopt": "ℹ️ دارایی بی‌صاحب", "dust": "ℹ️ خرده‌کوین"}

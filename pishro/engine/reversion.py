@@ -61,7 +61,8 @@ class ExitOrder:
 
 @dataclass
 class Account:
-    equity: float = 0.0
+    equity: float = 0.0        # trading equity (account value minus the capital-cap reserve)
+    real_equity: float = 0.0   # whole account value
     free_tmn: float = 0.0
     exposure: float = 0.0
     by_base: dict = field(default_factory=dict)

@@ -2,6 +2,7 @@
 
 mode: paper                    # paper = تست سایه با قیمت زنده | live = پول واقعی (نیاز به LIVE_CONFIRM=I_UNDERSTAND)
 initial_capital_tmn: 5000000   # سرمایه‌ی شبیه‌سازی در paper و بک‌تست
+trading_capital_tmn: 0         # سقف سرمایه‌ی قابل‌معامله (۰ = کل حساب). بقیه‌ی تومان ذخیره‌ی دست‌نخورده است
 data_dir: data
 
 challenge:
