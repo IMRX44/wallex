@@ -1,0 +1,113 @@
+# پیکربندی ربات «پیشرو» — همه مقادیر با متغیر محیطی هم قابل بازنویسی‌اند (README را ببینید)
+
+mode: paper                    # paper = تست سایه با قیمت زنده | live = پول واقعی (نیاز به LIVE_CONFIRM=I_UNDERSTAND)
+initial_capital_tmn: 5000000   # سرمایه‌ی شبیه‌سازی در paper و بک‌تست
+data_dir: data
+
+challenge:
+  # پایان رسمی چالش (به وقت تهران). ربات قبل از آن همه‌چیز را به تومان تبدیل می‌کند.
+  end: "2026-10-26T23:50:00+03:30"
+  entry_cutoff_minutes: 120    # از این زمان مانده به پایان، ورود جدید ممنوع
+  flatten_minutes: 45          # از این زمان مانده به پایان، همه پوزیشن‌ها فروخته می‌شوند
+
+exchange:
+  base_url: https://api.wallex.ir
+  ws_url: wss://api.wallex.ir/ws
+  ws_enabled: true
+  poll_interval_sec: 2.0
+  request_timeout_sec: 10
+  max_orders_per_sec: 4
+  # کارمزد اعلامی API برای بازار تومانی؛ اگر اولین معامله‌ی واقعی کارمزد صفر بگیرد، ربات خودکار عوض می‌کند
+  fallback_maker_fee: 0.0025
+  fallback_taker_fee: 0.0030
+  detect_fee_from_fills: true
+
+references:
+  binance_rest: https://data-api.binance.vision
+  binance_ws: wss://data-stream.binance.vision
+  binance_ws_enabled: true
+  nobitex: true
+  nobitex_base_url: https://apiv2.nobitex.ir
+  nobitex_interval_sec: 10
+  # اگر مرجع‌های مستقل بیش از این با هم اختلاف داشتند، آن بازار معامله نمی‌شود
+  max_ref_disagreement: 0.012
+
+universe:
+  quote: TMN                   # سود باید به تومان محقق شود، پس فقط بازارهای تومانی معامله می‌شوند
+  excluded_file: config/excluded_markets.txt
+  min_volume_24h_tmn: 3000000000   # حداقل حجم روزانه ۳ میلیارد تومان
+  max_spread_pct: 0.012
+  refresh_minutes: 15
+
+strategy:                      # بازگشت پریمیوم (Premium Reversion)
+  baseline_halflife_min: 30    # حافظه‌ی «پریمیوم عادی» هر بازار
+  long_halflife_min: 2880      # حافظه‌ی بلند برای تشخیص تغییر رژیم
+  warmup_minutes: 90
+  edge_floor_zero_fee: 0.004   # حداقل فاصله‌ی خرید زیر قیمت منصفانه وقتی کارمزد صفر است
+  edge_floor_fee_mult: 1.6     # وقتی کارمزد هست: حداقل = ضریب × (کارمزد خرید + فروش) + min_profit
+  edge_vol_mult: 2.5           # حداقل = ضریب × نوسان پریمیوم
+  edge_max: 0.03
+  min_profit: 0.001            # سود خالص حداقلی بعد از کارمزد
+  exit_edge: 0.0               # فروش در پریمیوم عادی (+ این مقدار)
+  stop_pct: 0.025
+  max_hold_minutes: 240
+  resting_markets: 4           # چند بازار سفارش خرید منتظر (میکر) داشته باشند
+  sniper_enabled: true         # بقیه‌ی بازارها: خرید فوری وقتی قیمت فروش زیر سطح آمد
+  requote_bps: 5
+  requote_max_age_sec: 45
+  shock_ref_drop: 0.005        # افت ۰.۵٪ بایننس در ۵ دقیقه = توقف ورود
+  shock_usdt_jump: 0.003       # جهش ۰.۳٪ تتر در ۵ دقیقه = توقف ورود
+  regime_std_ratio_max: 2.2    # نوسان پریمیوم ۶ ساعت اخیر نسبت به بلندمدت
+  position_frac: 0.20          # اندازه‌ی پایه‌ی هر پوزیشن (قبل از تعدیل ML و ایجنت)
+
+ml:
+  enabled: true
+  model_path: models/reversion.pkl
+  min_prob: 0.55
+  # اندازه بر اساس اطمینان مدل: p=min_prob → 50٪، p=full_size_prob → 100٪
+  full_size_prob: 0.72
+  retrain_hours: 12
+  retrain_days: 21
+
+risk:
+  max_drawdown_pct: 0.06        # افت ۶٪ از سقف = توقف کامل و نقد کردن
+  daily_loss_limit_pct: 0.025   # ضرر ۲.۵٪ در روز = توقف ورود تا فردا
+  risk_per_trade_pct: 0.008     # حداکثر ۰.۸٪ سرمایه در معرض ضرر هر معامله (با حد ضرر)
+  max_position_pct: 0.25
+  max_total_exposure_pct: 0.75
+  min_cash_reserve_pct: 0.20
+  max_open_positions: 4
+  max_book_participation: 0.30  # سفارش حداکثر ۳۰٪ عمق ۳ سطح اول
+  max_consecutive_losses: 3
+  loss_cooldown_minutes: 45
+  stale_data_sec: 20
+  max_api_errors_per_min: 20
+  min_order_tmn: 200000
+
+ai:
+  enabled: true
+  model: anthropic/claude-opus-5.5
+  agent_interval_minutes: 20
+  agent_max_steps: 8
+  policy_ttl_minutes: 90        # اگر ایجنت جواب ندهد، سیاست به حالت محافظه‌کار برمی‌گردد
+  narrate_trades: true
+  request_timeout_sec: 120
+  max_output_tokens: 2000
+  news_feeds:
+    - https://wallex.ir/blog/feed/
+    - https://arzdigital.com/feed/
+    - https://www.coindesk.com/arc/outboundfeeds/rss/
+    - https://cointelegraph.com/rss
+  news_max_age_hours: 12
+
+backtest:
+  days: 30
+  max_markets: 40
+  fill_margin: 0.0005          # برای پر شدن میکر، قیمت باید ۰.۰۵٪ از سفارش ما عبور کند
+  min_minute_volume_tmn: 1000000
+  taker_slippage: 0.0008
+  train_frac: 0.6              # walk-forward: ۶۰٪ اول آموزش ML، ۴۰٪ آخر تست
+  fee_scenarios: [[0.0025, 0.003], [0.0, 0.0]]
+
+dashboard:
+  public_read: true            # داوران بدون رمز ببینند؛ دکمه‌های کنترل رمز می‌خواهند

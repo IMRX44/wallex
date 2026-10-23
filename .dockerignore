@@ -1,0 +1,9 @@
+.git
+data
+data_demo
+deliverables
+video/build
+**/__pycache__
+.env
+*.pyc
+tests

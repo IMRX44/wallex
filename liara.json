@@ -1,0 +1,15 @@
+{
+  "platform": "docker",
+  "app": "pishro",
+  "port": 8000,
+  "disks": [
+    { "name": "data", "mountTo": "/app/data" }
+  ],
+  "healthCheck": {
+    "command": "CMD python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)\"",
+    "interval": 60,
+    "timeout": 15,
+    "retries": 3,
+    "startPeriod": 120
+  }
+}

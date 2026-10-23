@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pishro Trading Bot</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--fg:#0f172a;--muted:#64748b;--line:#e5e7eb;--green:#16a34a;--red:#dc2626;--blue:#2563eb;--amber:#d97706}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1220;--card:#111a2e;--fg:#e5e7eb;--muted:#94a3b8;--line:#1f2a44}}
+:root[data-theme="dark"]{--bg:#0b1220;--card:#111a2e;--fg:#e5e7eb;--muted:#94a3b8;--line:#1f2a44}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:Vazirmatn,Tahoma,system-ui,sans-serif;font-size:14px;line-height:1.6}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--card)}
+h1{font-size:1.15rem;margin:0}.badge{padding:2px 10px;border-radius:999px;font-size:.8rem;background:var(--line)}
+.badge.live{background:var(--red);color:#fff}.badge.paper{background:var(--blue);color:#fff}
+main{max-width:1280px;margin:auto;padding:12px 16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.kpi .l{color:var(--muted);font-size:.8rem}.kpi .v{font-size:1.25rem;font-weight:600;direction:ltr;text-align:right}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:12px;margin-top:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;overflow:hidden}
+.card h2{font-size:.95rem;margin:0 0 8px}
+table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{color:var(--muted);font-weight:500}td.r{white-space:normal;min-width:220px}
+.pos{color:var(--green)}.neg{color:var(--red)}.muted{color:var(--muted)}
+.feed{max-height:460px;overflow:auto}.item{border-bottom:1px solid var(--line);padding:6px 0}
+.item .t{color:var(--muted);font-size:.75rem}.k{display:inline-block;font-size:.72rem;padding:0 6px;border-radius:6px;background:var(--line);margin-left:6px}
+.k.buy_fill,.k.buy_order{background:#dcfce7;color:#166534}.k.sell_fill,.k.sell_order{background:#fee2e2;color:#991b1b}.k.agent_policy{background:#e0e7ff;color:#3730a3}
+svg{width:100%;height:auto}.ctrl button{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;padding:5px 10px;cursor:pointer;margin-left:4px}
+.wrap{overflow-x:auto}.small{font-size:.78rem}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>پیشرو — ربات معاملاتی بازگشت پریمیوم والکس <span id="mode" class="badge">…</span></h1>
+  <div class="small muted" id="sub">در حال بارگذاری…</div></div>
+  <div class="ctrl">
+    <button onclick="ctl('agent')">بازبینی ایجنت</button>
+    <button onclick="ctl('pause')">توقف ورود</button>
+    <button onclick="ctl('resume')">ادامه</button>
+    <button onclick="ctl('flatten')">تبدیل همه به تومان</button>
+    <a href="/report" target="_blank"><button>گزارش بک‌تست</button></a>
+    <a href="/export/decisions.jsonl"><button>لاگ تصمیم‌ها</button></a>
+  </div>
+</header>
+<main>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid">
+    <div class="card"><h2>منحنی ارزش حساب (تومان)</h2><div id="chart"></div></div>
+    <div class="card"><h2>سیاست فعلی ایجنت (Claude)</h2><div id="policy"></div></div>
+  </div>
+  <div class="grid">
+    <div class="card wrap"><h2>پوزیشن‌های باز</h2><div id="positions"></div></div>
+    <div class="card wrap"><h2>سفارش‌های خرید فعال</h2><div id="orders"></div></div>
+  </div>
+  <div class="grid">
+    <div class="card wrap"><h2>بهترین فرصت‌ها (زنده)</h2><div id="opps"></div></div>
+    <div class="card"><h2>لاگ تصمیم‌ها (چرا خرید/فروش)</h2><div class="feed" id="feed"></div></div>
+  </div>
+  <div class="grid">
+    <div class="card wrap"><h2>معاملات بسته‌شده</h2><div id="trades"></div></div>
+    <div class="card"><h2>بازبینی‌های ایجنت</h2><div class="feed" id="agent"></div></div>
+  </div>
+</main>
+<script>
+const fa = (x, d=0) => x==null||isNaN(x) ? '—' : Number(x).toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
+const pct = (x, d=2) => x==null ? '—' : (x>0?'+':'')+fa(x,d)+'%';
+const cls = x => x>0?'pos':(x<0?'neg':'');
+const esc = s => String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tm = ts => new Date(ts*1000).toLocaleTimeString('fa-IR',{timeZone:'Asia/Tehran'});
+async function j(u){const r=await fetch(u);if(!r.ok)throw new Error(r.status);return r.json();}
+function table(rows, cols){ if(!rows||!rows.length) return '<div class="muted">—</div>';
+  return '<table><tr>'+cols.map(c=>`<th>${c[0]}</th>`).join('')+'</tr>'+rows.map(r=>'<tr>'+cols.map(c=>`<td class="${c[2]?c[2](r):''}">${c[1](r)}</td>`).join('')+'</tr>').join('')+'</table>'; }
+function chart(rows){ if(!rows.length) return '<div class="muted">هنوز داده‌ای نیست</div>';
+  const w=700,h=220,v=rows.map(r=>r.equity),lo=Math.min(...v),hi=Math.max(...v),pad=(hi-lo)*.08||1;
+  const y=x=>h-15-(x-(lo-pad))/((hi+pad)-(lo-pad))*(h-30);
+  const pts=v.map((x,i)=>`${(40+i/(Math.max(v.length-1,1))*(w-45)).toFixed(1)},${y(x).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}"><text x="0" y="${y(hi)+4}" fill="currentColor" font-size="10">${fa(hi)}</text>
+    <text x="0" y="${y(lo)+4}" fill="currentColor" font-size="10">${fa(lo)}</text>
+    <polyline points="${pts}" fill="none" stroke="#2563eb" stroke-width="2"/></svg>`; }
+async function refresh(){
+  try{
+    const s=await j('/api/status');
+    const m=document.getElementById('mode'); m.textContent=s.mode==='live'?'پول واقعی':'تست سایه'; m.className='badge '+s.mode;
+    document.getElementById('sub').textContent=`وضعیت: ${s.status} · ${s.tradable_markets} بازار قابل معامله · داده ${s.data_age_s}s پیش · کارمزد: ${s.fee_regime} · ${fa(s.hours_left,1)} ساعت تا پایان چالش ${s.halted?' · ⛔ '+s.halted:''}`;
+    const k=[['ارزش حساب (تومان)',fa(s.equity_tmn)],['بازده',pct(s.return_pct),cls(s.return_pct)],['افت از سقف',pct(-s.drawdown_pct),s.drawdown_pct>0?'neg':''],
+      ['سود محقق‌شده',fa(s.realized_pnl_tmn),cls(s.realized_pnl_tmn)],['معاملات',fa(s.trades)],['نرخ برد',s.win_rate_pct==null?'—':fa(s.win_rate_pct,0)+'%'],
+      ['تومان آزاد',fa(s.free_tmn)],['تأخیر ثبت سفارش',s.order_latency_ms_p50==null?'—':fa(s.order_latency_ms_p50)+'ms'],['ML / ایجنت',(s.ml_model?'✓':'✗')+' / '+(s.ai_agent?'✓':'✗')]];
+    document.getElementById('kpis').innerHTML=k.map(x=>`<div class="kpi"><div class="l">${x[0]}</div><div class="v ${x[2]||''}">${x[1]}</div></div>`).join('');
+    const p=s.policy; const mk=Object.entries(p.markets||{});
+    document.getElementById('policy').innerHTML=`<div>حالت: <b>${esc(p.mode)}</b> · اندازه ×${fa(p.size_mult,2)} · عمق ورود ×${fa(p.edge_mult,2)} · منبع: ${esc(p.source)}</div>
+      <div class="small" style="margin:6px 0">${esc(p.rationale||'')}</div>`+(mk.length?table(mk,[['بازار',r=>r[0]],['مجاز',r=>r[1].allow?'✓':'✗'],['اندازه',r=>fa(r[1].size_mult,2)],['عمق',r=>fa(r[1].edge_mult,2)],['دلیل',r=>esc(r[1].note),()=>'r']]):'');
+    document.getElementById('positions').innerHTML=table(s.positions,[['بازار',r=>r.symbol],['ورود',r=>fa(r.entry,4)],['قیمت',r=>fa(r.bid,4)],['ارزش',r=>fa(r.value_tmn)],
+      ['سود باز',r=>pct(r.unrealized_pct),r=>cls(r.unrealized_pct)],['حد ضرر',r=>fa(r.stop,4)],['فروش منتظر',r=>fa(r.exit_order,4)],['دقیقه',r=>fa(r.age_min,0)]]);
+    document.getElementById('orders').innerHTML=table(s.working_orders,[['بازار',r=>r.symbol],['نوع',r=>r.mode==='maker'?'منتظر':'فوری'],['قیمت',r=>fa(r.price,4)],['مقدار',r=>fa(r.qty,4)],['احتمال ML',r=>r.prob==null?'—':fa(r.prob*100,0)+'%'],['عمق',r=>pct(r.edge*100)]]);
+  }catch(e){document.getElementById('sub').textContent='اتصال برقرار نیست: '+e;}
+  try{document.getElementById('chart').innerHTML=chart(await j('/api/equity'));}catch(e){}
+  try{const o=await j('/api/opportunities?limit=15');
+    document.getElementById('opps').innerHTML=table(o,[['بازار',r=>r.symbol+(r.resting?' ●':'')],['فاصله‌ی فعلی',r=>pct(r.dev_now_pct),r=>cls(r.dev_now_pct)],['عمق ورود',r=>pct(r.edge_pct)],['احتمال ML',r=>r.prob==null?'—':fa(r.prob*100,0)+'%'],['نوسان پریمیوم',r=>pct(r.premium_std_pct)],['نرخ برگشت',r=>fa(r.revert_rate*100,0)+'%']]);}catch(e){}
+  try{const d=await j('/api/decisions?limit=80');
+    document.getElementById('feed').innerHTML=d.map(r=>`<div class="item"><span class="k ${r.kind}">${esc(r.kind)}</span><b>${esc(r.symbol)}</b> <span class="t">${esc(r.time_tehran)}</span><div class="small">${esc(r.reason)}</div></div>`).join('');}catch(e){}
+  try{const t=await j('/api/trades?limit=40');
+    document.getElementById('trades').innerHTML=table(t,[['بازار',r=>r.symbol],['ورود',r=>fa(r.entry_price,4)],['خروج',r=>fa(r.exit_price,4)],['سود (تومان)',r=>fa(r.pnl_tmn),r=>cls(r.pnl_tmn)],['بازده',r=>pct(r.ret*100,3),r=>cls(r.ret)],['دلیل خروج',r=>esc(r.reason_out)],['زمان',r=>tm(r.exit_ts)]]);}catch(e){}
+  try{const a=await j('/api/agent?limit=8');
+    document.getElementById('agent').innerHTML=a.map(r=>{let out={};try{out=JSON.parse(r.output)}catch(e){};const acts=(out.actions||[]).map(x=>esc(x.tool+(x.symbol?' '+x.symbol:'')+(x.mode?' '+x.mode:''))).join('، ');
+      return `<div class="item"><span class="t">${tm(r.ts)} · ${esc(r.model)}</span><div>${esc(r.rationale)}</div><div class="small muted">${acts}</div></div>`}).join('')||'<div class="muted">—</div>';}catch(e){}
+}
+async function ctl(a){ const pw=prompt('رمز داشبورد'); if(!pw) return;
+  const r=await fetch('/api/control/'+a,{method:'POST',headers:{Authorization:'Basic '+btoa('admin:'+pw)}}); alert(r.ok?'انجام شد':'خطا: '+r.status); refresh(); }
+refresh(); setInterval(refresh, 5000);
+</script>
+</body>
+</html>
