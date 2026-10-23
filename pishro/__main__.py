@@ -23,8 +23,11 @@ from .config import ROOT, load_config
 
 
 def _setup_logging(level: str = "INFO") -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if os.environ.get("LOG_FILE"):          # also keep a log file (used by local/live.ps1)
+        handlers.append(logging.FileHandler(os.environ["LOG_FILE"], encoding="utf-8"))
     logging.basicConfig(level=getattr(logging, level.upper(), logging.INFO),
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s", handlers=handlers)
     for noisy in ("httpx", "httpcore", "openai", "websockets"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
