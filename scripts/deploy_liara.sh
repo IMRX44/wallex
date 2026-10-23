@@ -21,11 +21,9 @@ if ! liara app list "${AUTH[@]}" 2>/dev/null | grep -qw "$APP"; then
   echo ">> creating app $APP"
   liara create --app "$APP" --platform docker --plan "${PLAN:-medium-g2}" --feature-plan "${FEATURE_PLAN:-basic}" --network "$NETWORK" "${AUTH[@]}"
 fi
-if liara disk list --app "$APP" "${AUTH[@]}" 2>/dev/null | grep -qw data; then
-  echo ">> disk 'data' exists"
-else
-  liara disk create --app "$APP" --name data --size "${DISK_GB:-2}" "${AUTH[@]}"
-fi
+# the CLI has no "disk list"; a failing create on redeploy means the disk exists. If it really does not,
+# "liara deploy --disks data:/app/data" below fails loudly.
+liara disk create --app "$APP" --name data --size "${DISK_GB:-2}" "${AUTH[@]}" 2>/dev/null   || echo ">> disk 'data' not created (already exists?) - deploy will verify the mount"
 
 if [[ -f .env ]]; then
   echo ">> setting environment variables from .env"
