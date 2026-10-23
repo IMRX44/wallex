@@ -45,3 +45,57 @@ def test_reference_falls_back_and_pages_500():
     assert syms == {"BTC"}
     assert len(k) == 1200
     assert rest == "https://mexc.example"
+
+
+# ---------------------------------------------------------------- 2026-10-23 (part 2)
+from types import SimpleNamespace  # noqa: E402
+
+from pishro.engine.reversion import needs_requote, select_resting  # noqa: E402
+from pishro.exchange.wallex import parse_order  # noqa: E402
+
+
+def _c(sym, score):
+    return {"symbol": sym, "score": score}
+
+
+def test_resting_hysteresis_keeps_incumbents():
+    """Paper run: 195 of 203 resting bids were cancelled only because the ranking jittered."""
+    now = 1000.0
+    resting = {"A": SimpleNamespace(since=now - 30, placed=now - 30), "B": SimpleNamespace(since=now - 200, placed=now - 5)}
+    # C ranks above B by 10%: not enough to displace it
+    want, swaps = select_resting([_c("C", 1.10), _c("B", 1.0), _c("A", 0.9)], resting, 2, now, 90, 1.25)
+    assert set(want) == {"A", "B"} and not swaps
+    # C is 30% better than the weakest incumbent, but that one (A) is young -> kept
+    want, swaps = select_resting([_c("C", 1.30), _c("B", 1.2), _c("A", 1.0)], resting, 2, now, 90, 1.25)
+    assert set(want) == {"A", "B"}
+    # ... once A is old enough it is displaced
+    resting["A"].since = now - 120
+    want, swaps = select_resting([_c("C", 1.30), _c("B", 1.2), _c("A", 1.0)], resting, 2, now, 90, 1.25)
+    assert set(want) == {"B", "C"} and swaps == {"A": "C"}
+    # an incumbent that lost eligibility (gate) is not kept; a free slot is filled at once
+    want, _ = select_resting([_c("C", 0.5)], resting, 2, now, 90, 1.25)
+    assert set(want) == {"C"}
+
+
+def test_requote_rules():
+    assert needs_requote(101.0, 100.0, 1, 5e-4, 90)        # fair value fell: move down at once
+    assert not needs_requote(100.0, 100.02, 500, 5e-4, 90)  # tiny move: stay
+    assert not needs_requote(100.0, 101.0, 30, 5e-4, 90)    # higher level, but too young
+    assert needs_requote(100.0, 101.0, 120, 5e-4, 90)
+
+
+def test_fee_in_toman_is_not_zero_fee_and_missing_fee_is_not_reported():
+    r = {"symbol": "BTCTMN", "side": "BUY", "type": "LIMIT", "price": "100", "origQty": "2", "executedQty": "2",
+         "executedSum": "200", "status": "FILLED", "fills": [{"fee": "0.5", "feeAsset": "TMN"}]}
+    o = parse_order(r)
+    assert o.fee_reported and o.fee_quote == 0.5 and o.fee_base == 0.0
+    r["fills"] = [{"price": "100", "quantity": "2"}]
+    assert not parse_order(r).fee_reported
+
+
+def test_model_auc_guard():
+    from pishro.bot import model_usable
+    cfg = SimpleNamespace(get=lambda k, d=None: {"ml.min_auc": 0.55}.get(k, d))
+    assert not model_usable(SimpleNamespace(report=SimpleNamespace(auc=0.50)), cfg)
+    assert not model_usable(SimpleNamespace(report=SimpleNamespace(auc=float("nan"))), cfg)
+    assert model_usable(SimpleNamespace(report=SimpleNamespace(auc=0.58)), cfg)
