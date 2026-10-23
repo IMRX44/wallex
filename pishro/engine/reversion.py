@@ -504,6 +504,7 @@ class ReversionEngine:
             return
         qty = info.round_qty(notional / price)
         if qty <= 0 or qty * price < max(info.min_notional, self.risk.min_order_tmn):
+            self.blocked[sym] = f"size: {qty * price:,.0f} < min order {max(info.min_notional, self.risk.min_order_tmn):,.0f}"
             return
         if cur is not None:
             c = dict(c, _since=cur.since)

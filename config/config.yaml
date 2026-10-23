@@ -90,7 +90,7 @@ risk:
   loss_cooldown_minutes: 45
   stale_data_sec: 20
   max_api_errors_per_min: 20
-  min_order_tmn: 200000
+  min_order_tmn: 100000        # حداقل سفارش ربات (حداقل والکس ۵۰ هزار)؛ با سقف ۱ میلیونی، ۲۰۰ هزار هر سفارش را رد می‌کرد
 
 ai:
   enabled: true

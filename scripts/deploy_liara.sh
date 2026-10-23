@@ -19,7 +19,7 @@ if ! liara app list "${AUTH[@]}" 2>/dev/null | grep -qw "$APP"; then
     liara network create --name "$NETWORK" "${AUTH[@]}"
   fi
   echo ">> creating app $APP"
-  liara create --app "$APP" --platform docker --plan "${PLAN:-medium-g2}" --network "$NETWORK" "${AUTH[@]}"
+  liara create --app "$APP" --platform docker --plan "${PLAN:-medium-g2}" --feature-plan "${FEATURE_PLAN:-basic}" --network "$NETWORK" "${AUTH[@]}"
 fi
 if liara disk list --app "$APP" "${AUTH[@]}" 2>/dev/null | grep -qw data; then
   echo ">> disk 'data' exists"
