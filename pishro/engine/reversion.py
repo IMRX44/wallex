@@ -69,16 +69,20 @@ class Account:
     balances: dict = field(default_factory=dict)
 
 
-def needs_requote(cur_price: float, new_price: float, age: float, bps: float, min_rest: float) -> bool:
+def needs_requote(cur_price: float, new_price: float, age: float, bps: float, min_rest: float,
+                  urgent: float = 0.002, min_down_age: float = 20.0) -> bool:
     """Move a resting bid only when it matters.
 
-    Above the new level (fair value fell) -> move down at once: we would overpay.
-    Below it -> raise only after ``min_rest`` seconds, and only by more than ``bps``.
+    Above the new level (fair value fell): move down at once if we would overpay by more than
+    ``urgent`` (0.2%, a fraction of the ~0.9% entry edge), otherwise after ``min_down_age`` s.
+    Below it: raise only after ``min_rest`` seconds, and only by more than ``bps``.
     """
     if new_price <= 0:
         return False
-    if cur_price > new_price * (1 + bps):
+    if cur_price > new_price * (1 + urgent):
         return True
+    if cur_price > new_price * (1 + bps):
+        return age >= min_down_age
     return new_price > cur_price * (1 + bps) and age >= min_rest
 
 
@@ -136,6 +140,10 @@ class ReversionEngine:
         # hysteresis: a resting order lives at least min_rest_sec and is only displaced by a clearly better market
         self.min_rest = float(s.get("min_rest_sec", 90))
         self.replace_ratio = float(s.get("replace_score_ratio", 1.25))
+        # a gate that flickers at its threshold must not make the bot place/cancel every few seconds:
+        # after a resting bid is cancelled by a gate, that market sits out gate_cooldown_sec
+        self.gate_cooldown = float(s.get("gate_cooldown_sec", 600))
+        self.gate_hold: dict[str, tuple[float, str]] = {}
         self.position_frac = float(s.get("position_frac", 0.2))
         self.min_prob = float(cfg.get("ml.min_prob", 0.55))
         self.full_prob = float(cfg.get("ml.full_size_prob", 0.72))
@@ -393,6 +401,10 @@ class ReversionEngine:
             if self.cooldown.get(sym, 0) > now:
                 blocked[sym] = "cooldown"
                 continue
+            hold = self.gate_hold.get(sym)
+            if hold and hold[0] > now:
+                blocked[sym] = f"gate_cooldown:{hold[1]}"
+                continue
             allowed, edge_mult, size_mult = policy.for_market(sym)
             if not allowed:
                 blocked[sym] = "agent"
@@ -443,7 +455,11 @@ class ReversionEngine:
             if e.mode != "maker" or sym in desired:
                 continue
             if sym not in ok_syms:
-                why = f"فرصت از بین رفت ({blocked.get(sym) or 'دیگر واجد شرایط نیست'})"
+                gate = blocked.get(sym) or ""
+                why = f"فرصت از بین رفت ({gate or 'دیگر واجد شرایط نیست'})"
+                if gate and not gate.startswith(("agent", "cooldown", "gate_cooldown")):
+                    self.gate_hold[sym] = (now + self.gate_cooldown, gate)
+                    why += f"؛ این بازار {self.gate_cooldown / 60:.0f} دقیقه کنار گذاشته شد تا ثبت و لغو پشت‌سرهم نشود"
             elif sym in swaps:
                 why = f"جایگزین با فرصت بهتر {swaps[sym]} (امتیاز ≥ {self.replace_ratio:.2f}× این بازار)"
             else:

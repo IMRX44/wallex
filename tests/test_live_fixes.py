@@ -78,7 +78,9 @@ def test_resting_hysteresis_keeps_incumbents():
 
 
 def test_requote_rules():
-    assert needs_requote(101.0, 100.0, 1, 5e-4, 90)        # fair value fell: move down at once
+    assert needs_requote(101.0, 100.0, 1, 5e-4, 90)        # fair value fell 1%: move down at once
+    assert not needs_requote(100.1, 100.0, 5, 5e-4, 90)     # 0.1% above: wait (no cancel/replace every tick)
+    assert needs_requote(100.1, 100.0, 25, 5e-4, 90)        # ... but not forever
     assert not needs_requote(100.0, 100.02, 500, 5e-4, 90)  # tiny move: stay
     assert not needs_requote(100.0, 101.0, 30, 5e-4, 90)    # higher level, but too young
     assert needs_requote(100.0, 101.0, 120, 5e-4, 90)
@@ -188,3 +190,4 @@ def test_klines_skip_blocked_page_and_never_thrash():
     ts = [x[0] for x in k]
     assert len(k) == 1000 and ts[0] == start and ts[-1] == start + 1499 * 60_000   # pages 1 and 3 kept, gap stays
     assert rest == "https://mexc.example"
+
