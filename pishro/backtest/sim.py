@@ -85,7 +85,7 @@ def prepare(hist: dict, start: int | None = None, end: int | None = None) -> dic
         o = np.where(np.isnan(wx["o"].to_numpy(float)), c, wx["o"].to_numpy(float))
         h = np.where(np.isnan(wx["h"].to_numpy(float)), c, wx["h"].to_numpy(float))
         lo = np.where(np.isnan(wx["l"].to_numpy(float)), c, wx["l"].to_numpy(float))
-        ref = m["ref"].reindex(grid).ffill().to_numpy(float)
+        ref = m["ref"].reindex(grid).ffill(limit=3).to_numpy(float)   # never carry a stale reference across a gap
         fair = ref * usdt_c
         if np.nanmedian(np.abs(c / fair - 1)) > 0.2:   # wrong unit/mapping (e.g. 1000x tokens)
             log.warning("%s: Wallex price far from reference, skipped", sym)

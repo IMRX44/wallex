@@ -147,6 +147,12 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--markets", type=int, default=None)
     b = sub.add_parser("backtest")
     b.add_argument("--no-deploy-models", action="store_true")
+    t = sub.add_parser("tune")
+    t.add_argument("--samples", type=int, default=36)
+    t.add_argument("--workers", type=int, default=None)
+    t.add_argument("--capital", type=float, default=None)
+    t.add_argument("--exclude", default="", help="comma-separated markets to leave out (e.g. FILTMN)")
+    t.add_argument("--out", default="reports/tune.json")
     d = sub.add_parser("demo")
     d.add_argument("--days", type=float, default=21)
     sub.add_parser("export")
@@ -170,6 +176,17 @@ def main(argv: list[str] | None = None) -> int:
         from .backtest.runner import run_all
         res = run_all(cfg, train_deploy=not a.no_deploy_models)
         print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if a.cmd == "tune":
+        from .backtest.tune import run_tune, write
+        ex = tuple(x.strip().upper() for x in a.exclude.split(",") if x.strip())
+        res = run_tune(cfg, samples=a.samples, workers=a.workers, capital=a.capital, exclude=ex)
+        path = write(res, ROOT / a.out)
+        for sc in res["scenarios"]:
+            print(f"fee {sc['maker']:.4f}: {sc['verdict']}")
+            print("  holdout default:", sc["holdout"]["default"])
+            print("  holdout chosen: ", sc["holdout"]["chosen"], sc["chosen"])
+        print("written", path)
         return 0
     if a.cmd == "demo":
         from .backtest import synthetic
