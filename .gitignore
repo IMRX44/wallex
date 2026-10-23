@@ -9,3 +9,4 @@ deliverables/*.db
 video/build/
 .pytest_cache/
 .ruff_cache/
+*.mp4
