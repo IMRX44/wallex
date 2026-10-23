@@ -127,6 +127,7 @@ class Bot:
             log.info("zero-fee markets: %s", sorted(self.broker.zero_fee))
         await self.broker.start()
         if self.live:
+            await self._cancel_stale_orders()
             await self._adopt_holdings()
         if not self.risk.peak:
             self.risk.peak = self.capital
@@ -217,6 +218,28 @@ class Bot:
             self.agent_triggers.append(f"{self.risk.consec_losses} consecutive losses")
         asyncio.get_event_loop().create_task(self.notifier.send(
             f"{'✅' if t.pnl_tmn > 0 else '🔻'} {t.symbol} {t.reason_out}: {t.pnl_tmn:,.0f} تومان ({t.ret:+.2%})"))
+
+    async def _cancel_stale_orders(self) -> None:
+        """Orders of a previous run (crash, power loss) are unknown to this process: cancel them first,
+        so they neither lock TMN nor fill into coins nobody tracks. Only the bot's own ids (prefix PR)."""
+        try:
+            orders = await self.client.open_orders()
+        except Exception as e:  # noqa: BLE001
+            log.warning("open orders at start: %r", e)
+            return
+        for o in orders:
+            cid = str(o.get("clientOrderId") or o.get("client_id") or "")
+            if not cid.startswith("PR"):
+                continue
+            try:
+                await self.client.cancel_order(cid)
+                self.dlog.log("stale_order_cancel", str(o.get("symbol", "")).upper(),
+                              "سفارش باز از اجرای قبلی ربات پس از راه‌اندازی مجدد لغو شد", client_id=cid,
+                              side=o.get("side"), price=o.get("price"), qty=o.get("origQty") or o.get("quantity"))
+            except Exception as e:  # noqa: BLE001
+                log.warning("cancel stale %s: %r", cid, e)
+        if orders:
+            await self.broker.balances(refresh=True)
 
     async def _adopt_holdings(self) -> None:
         """After a restart, coins on the account that no position tracks are adopted so they get sold."""

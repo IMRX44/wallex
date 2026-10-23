@@ -99,3 +99,29 @@ def test_model_auc_guard():
     assert not model_usable(SimpleNamespace(report=SimpleNamespace(auc=0.50)), cfg)
     assert not model_usable(SimpleNamespace(report=SimpleNamespace(auc=float("nan"))), cfg)
     assert model_usable(SimpleNamespace(report=SimpleNamespace(auc=0.58)), cfg)
+
+
+def test_live_start_cancels_only_own_stale_orders(tmp_path):
+    from pishro.bot import Bot
+
+    class FakeClient:
+        def __init__(self):
+            self.cancelled = []
+
+        async def open_orders(self):
+            return [{"clientOrderId": "PRREVABC", "symbol": "BTCTMN", "side": "BUY", "price": "1", "origQty": "1"},
+                    {"clientOrderId": "someone-else", "symbol": "ETHTMN"}]
+
+        async def cancel_order(self, cid):
+            self.cancelled.append(cid)
+
+    class FakeBroker:
+        async def balances(self, refresh=False):
+            return {}
+
+    logged = []
+    bot = Bot.__new__(Bot)
+    bot.client, bot.broker = FakeClient(), FakeBroker()
+    bot.dlog = SimpleNamespace(log=lambda kind, *a, **k: logged.append(kind))
+    asyncio.run(bot._cancel_stale_orders())
+    assert bot.client.cancelled == ["PRREVABC"] and logged == ["stale_order_cancel"]
