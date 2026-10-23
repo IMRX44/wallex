@@ -3,7 +3,8 @@
 #   LIARA_API_TOKEN  - Liara API token (Console > API)        LIARA_TEAM_ID - team id (optional)
 #   APP              - unique app name (default: pishro)
 # Secrets (WALLEX_API_KEY, LLM_*, DASHBOARD_PASSWORD, ...) are read from .env if present;
-# LIARA_* deploy credentials are never copied into the app's environment.
+# LIARA_* deploy credentials are never copied into the app's environment, and PISHRO_MODE /
+# LIVE_CONFIRM are left as they are on the app (switch them only with local/liara_live.cmd).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 APP="${APP:-pishro}"
@@ -27,7 +28,7 @@ liara disk create --app "$APP" --name data --size "${DISK_GB:-2}" "${AUTH[@]}" 2
 
 if [[ -f .env ]]; then
   echo ">> setting environment variables from .env"
-  mapfile -t ENVS < <(grep -vE '^\s*(#|$)' .env | sed 's/\s*#.*$//' | grep '=' | grep -v '=$' | grep -vE '^LIARA_')
+  mapfile -t ENVS < <(grep -vE '^\s*(#|$)' .env | sed 's/\s*#.*$//' | grep '=' | grep -v '=$' | grep -vE '^(LIARA_|PISHRO_MODE=|LIVE_CONFIRM=)')
   [[ ${#ENVS[@]} -gt 0 ]] && liara env set --app "$APP" "${ENVS[@]}" --force "${AUTH[@]}"
 fi
 
