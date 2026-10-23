@@ -44,6 +44,9 @@ class Entry:
     seen_qty: float = 0.0
     seen_fee: float = 0.0
     placed: float = field(default_factory=time.time)
+    seen_fee_q: float = 0.0    # buy fee charged in the quote asset (TMN), if Wallex reports it that way
+    since: float = 0.0         # first placement in this market (kept across requotes)
+    score: float = 0.0
 
 
 @dataclass
@@ -65,6 +68,52 @@ class Account:
     balances: dict = field(default_factory=dict)
 
 
+def needs_requote(cur_price: float, new_price: float, age: float, bps: float, min_rest: float) -> bool:
+    """Move a resting bid only when it matters.
+
+    Above the new level (fair value fell) -> move down at once: we would overpay.
+    Below it -> raise only after ``min_rest`` seconds, and only by more than ``bps``.
+    """
+    if new_price <= 0:
+        return False
+    if cur_price > new_price * (1 + bps):
+        return True
+    return new_price > cur_price * (1 + bps) and age >= min_rest
+
+
+def select_resting(ok: list[dict], resting: dict, slots: int, now: float, min_rest: float,
+                   ratio: float) -> tuple[dict[str, dict], dict[str, str]]:
+    """Pick which markets hold a resting maker bid, with hysteresis.
+
+    ``ok`` is sorted best-first. Markets that already rest and are still eligible keep their
+    slot; a newcomer displaces the weakest incumbent only if its score is ``ratio``x higher
+    and that incumbent has rested ``min_rest`` seconds. Returns (desired, {displaced: by}).
+    """
+    if slots <= 0:
+        return {}, {}
+    by_sym = {c["symbol"]: c for c in ok}
+    keep = sorted((by_sym[s] for s in resting if s in by_sym), key=lambda c: -c["score"])[:slots]
+    kept = {c["symbol"] for c in keep}
+    swaps: dict[str, str] = {}
+    for c in ok:
+        if c["symbol"] in kept:
+            continue
+        if len(keep) < slots:
+            keep.append(c)
+            kept.add(c["symbol"])
+            continue
+        weakest = min(keep, key=lambda k: k["score"])
+        e = resting.get(weakest["symbol"])
+        aged = e is None or now - (e.since or e.placed) >= min_rest
+        if aged and c["score"] >= ratio * max(weakest["score"], 1e-12):
+            keep.remove(weakest)
+            kept.discard(weakest["symbol"])
+            swaps[weakest["symbol"]] = c["symbol"]
+            keep.append(c)
+            kept.add(c["symbol"])
+    return {c["symbol"]: c for c in keep}, swaps
+
+
 class ReversionEngine:
     def __init__(self, cfg, market: LiveMarket, broker: Broker, risk: RiskManager, portfolio: Portfolio,
                  dlog: DecisionLog, policy_fn, model_fn, on_trade_closed=None):
@@ -83,6 +132,9 @@ class ReversionEngine:
         self.sniper = bool(s.get("sniper_enabled", True))
         self.requote_bps = float(s.get("requote_bps", 5)) / 1e4
         self.requote_age = float(s.get("requote_max_age_sec", 45))
+        # hysteresis: a resting order lives at least min_rest_sec and is only displaced by a clearly better market
+        self.min_rest = float(s.get("min_rest_sec", 90))
+        self.replace_ratio = float(s.get("replace_score_ratio", 1.25))
         self.position_frac = float(s.get("position_frac", 0.2))
         self.min_prob = float(cfg.get("ml.min_prob", 0.55))
         self.full_prob = float(cfg.get("ml.full_size_prob", 0.72))
@@ -101,6 +153,8 @@ class ReversionEngine:
         self.blocked: dict[str, str] = {}
         self.market_stats: dict[str, dict] = {}
         self.fee_regime = "api_table"
+        if broker.name != "live" and broker.fallback == (0.0, 0.0):
+            self.fee_regime = "paper_zero"      # shadow test of the zero-fee scenario (fallback fees set to 0)
         self.latencies: list[float] = []
         self.errors = 0
 
@@ -136,12 +190,14 @@ class ReversionEngine:
         o = e.order
         d_qty = o.filled_qty - e.seen_qty
         d_fee = o.fee_base - e.seen_fee
-        e.seen_qty, e.seen_fee = o.filled_qty, o.fee_base
+        d_fee_q = o.fee_quote - e.seen_fee_q
+        e.seen_qty, e.seen_fee, e.seen_fee_q = o.filled_qty, o.fee_base, o.fee_quote
         received = max(d_qty - d_fee, 0.0)
         if received <= 0:
             return
-        cost = d_qty * o.avg_price
-        buy_fee_rate = d_fee / d_qty if d_qty else 0.0
+        cost = d_qty * o.avg_price + d_fee_q
+        # the fee may come in the base asset (coins withheld) or in TMN; a TMN fee must not read as "zero fee"
+        buy_fee_rate = (d_fee / d_qty if d_qty else 0.0) + (d_fee_q / (d_qty * o.avg_price) if d_qty and o.avg_price else 0.0)
         self._detect_fee(o, buy_fee_rate)
         info = self.market.infos.get(o.symbol)
         pos = next((p for p in self.portfolio.by_engine(ENGINE) if p.symbol == o.symbol), None)
@@ -379,10 +435,19 @@ class ReversionEngine:
 
         n_pos = len(held)
         slots = max(0, min(self.k_resting, self.risk.max_open - n_pos))
-        desired = {c["symbol"]: c for c in ok[:slots]}
+        desired, swaps = select_resting(ok, {s: e for s, e in self.entries.items() if e.mode == "maker"},
+                                        slots, now, self.min_rest, self.replace_ratio)
+        ok_syms = {c["symbol"] for c in ok}
         for sym, e in list(self.entries.items()):
-            if e.mode == "maker" and sym not in desired:
-                await self._cancel_entry(sym, "بازار دیگر جزو بهترین فرصت‌ها نیست")
+            if e.mode != "maker" or sym in desired:
+                continue
+            if sym not in ok_syms:
+                why = f"فرصت از بین رفت ({blocked.get(sym) or 'دیگر واجد شرایط نیست'})"
+            elif sym in swaps:
+                why = f"جایگزین با فرصت بهتر {swaps[sym]} (امتیاز ≥ {self.replace_ratio:.2f}× این بازار)"
+            else:
+                why = "تعداد جایگاه‌های سفارش منتظر کم شد"
+            await self._cancel_entry(sym, why)
         for sym, c in desired.items():
             await self._ensure_resting(c, now)
         if self.sniper:
@@ -426,7 +491,8 @@ class ReversionEngine:
         price = info.round_price(level, BUY)
         cur = self.entries.get(sym)
         if cur is not None:
-            if abs(cur.order.price / price - 1) < self.requote_bps and now - cur.placed < self.requote_age:
+            cur.score = c.get("score", cur.score)
+            if not needs_requote(cur.order.price, price, now - cur.placed, self.requote_bps, self.min_rest):
                 return
             await self._cancel_entry(sym, "", quiet=True)
             if sym in {p.symbol for p in self.portfolio.by_engine(ENGINE)}:
@@ -438,6 +504,8 @@ class ReversionEngine:
         qty = info.round_qty(notional / price)
         if qty <= 0 or qty * price < max(info.min_notional, self.risk.min_order_tmn):
             return
+        if cur is not None:
+            c = dict(c, _since=cur.since)
         await self._place_entry(c, price, qty, "maker", now, requote=cur is not None)
 
     async def _snipe(self, c: dict, now: float) -> None:
@@ -471,7 +539,8 @@ class ReversionEngine:
             self.dlog.log("order_rejected", sym, f"سفارش خرید رد شد: {o.tag}", price=price, qty=qty)
             return
         explain = self._explain(c, mode)
-        e = Entry(o, mode, c["level"], c["edge"], c.get("prob"), c["feats"], c["fair"], c["baseline"], explain)
+        e = Entry(o, mode, c["level"], c["edge"], c.get("prob"), c["feats"], c["fair"], c["baseline"], explain,
+                  since=c.get("_since") or now, score=c.get("score", 0.0))
         self.entries[sym] = e
         self.account.free_tmn = max(0.0, self.account.free_tmn - price * qty)   # reserved until next refresh
         if not requote:
